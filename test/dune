@@ -1,5 +1,5 @@
 (tests
- (names test_oeil test_tui test_repo)
- (libraries oeil oeil.tui eio alcotest)
+ (names test_oeil test_tui test_repo test_ci)
+ (libraries oeil oeil.tui eio ptime alcotest)
  (deps
   (glob_files fixtures/*)))

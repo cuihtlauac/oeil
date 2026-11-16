@@ -13,7 +13,13 @@ type branch = {
   errors : string list;
 }
 
-type t = { repo : string; branches : branch list; at : float }
+type t = {
+  repo : string;
+  branches : branch list;
+  feeds : Ci.feed list;  (** workflows that run on a schedule or open PRs *)
+  feed_errors : string list;
+  at : float;
+}
 
 type ctx = {
   jobs : Jobs.t;
@@ -211,10 +217,18 @@ let snapshot ctx ~repo ?(recent = 86400.) () =
   | Error e -> Error e
   | Ok graph ->
       let since = Unix.gettimeofday () -. recent in
-      let branches =
-        Chain.branches graph ~repo
-        |> Eio.Fiber.List.map (branch_summary ctx ~repo ~graph ~since)
-        |> List.rev (* main first: the graph lists it last *)
+      let branches, (feeds, feed_errors) =
+        Eio.Fiber.pair
+          (fun () ->
+            Chain.branches graph ~repo
+            |> Eio.Fiber.List.map (branch_summary ctx ~repo ~graph ~since)
+            |> List.rev (* main first: the graph lists it last *))
+          (fun () ->
+            match Feeds.fetch ctx.github ~repo ~days:14 with
+            | Ok r -> r
+            | Error e -> ([], [ e ]))
       in
       Jobs.save ctx.jobs;
-      Ok { repo; branches; at = Unix.gettimeofday () }
+      Ok { repo; branches; feeds; feed_errors; at = Unix.gettimeofday () }
+
+let jobs ctx = ctx.jobs

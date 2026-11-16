@@ -163,23 +163,8 @@ let final ~now (m : Model.t) =
       | _ -> summary_table ~live:false ~now m);
     ]
 
-let log_view ~now ~(logs : Log_store.t) ~key ~offset ~height ~width (m : Model.t) =
-  let st = Model.stage m key in
-  let title =
-    match st with
-    | Some st ->
-        View.hcat ~gap:2
-          [
-            View.role `Header (text (Chain.kind_label st.kind));
-            muted (Option.value st.job ~default:"");
-            status_view st.status;
-            time_cell ~now st;
-          ]
-    | None -> muted key
-  in
-  let log =
-    Option.bind st (fun (st : Tracker.stage) -> Option.bind st.job (Log_store.find logs))
-  in
+(* A log, scrolled [offset] lines above its end, under [title]. *)
+let log_panel ~title ~(log : Log_store.log option) ~offset ~height ~width =
   let visible = max 1 (height - 5) in
   let body, position =
     match log with
@@ -218,6 +203,25 @@ let log_view ~now ~(logs : Log_store.t) ~key ~offset ~height ~width (m : Model.t
         View.hcat ~gap:3
           [ muted "esc back  ↑↓ pgup pgdn scroll  g top  G follow"; muted position ];
       ])
+
+let log_view ~now ~(logs : Log_store.t) ~key ~offset ~height ~width (m : Model.t) =
+  let st = Model.stage m key in
+  let title =
+    match st with
+    | Some st ->
+        View.hcat ~gap:2
+          [
+            View.role `Header (text (Chain.kind_label st.kind));
+            muted (Option.value st.job ~default:"");
+            status_view st.status;
+            time_cell ~now st;
+          ]
+    | None -> muted key
+  in
+  let log =
+    Option.bind st (fun (st : Tracker.stage) -> Option.bind st.job (Log_store.find logs))
+  in
+  log_panel ~title ~log ~offset ~height ~width
 
 let view ~(logs : Log_store.t) (m : Model.t) =
   View.fit (fun room ->

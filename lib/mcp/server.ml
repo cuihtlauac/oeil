@@ -90,6 +90,17 @@ let tools =
         ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
       ]
       [ "repo" ];
+    tool "pr_timeline"
+      "The life of a pull request, step by step with times and durations: the bot \
+       workflow run that opened it (for scraper PRs), the PR, its CI checks, the wait \
+       for review and merge, the deployer's stages, and when it went live. Also the \
+       share of time spent waiting for review."
+      [
+        ("repo", prop "owner/repo, e.g. ocaml/ocaml.org.");
+        ("pr", prop ~typ:"integer" "The pull request number.");
+        ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
+      ]
+      [ "repo"; "pr" ];
     tool "job_log" "The log of a job (by default its last 200 lines)."
       [
         ("job", prop "Job id, e.g. 2026-11-16/071954-docker-service-f92f02.");
@@ -388,29 +399,104 @@ let job_log ctx args =
       in
       ok_text (String.concat "\n" lines)
 
+let repo_arg args =
+  match arg_string args "repo" with
+  | Some r when Target.valid_repo r -> r
+  | Some r -> fail "not an owner/repo: %s" r
+  | None -> fail "missing argument: repo"
+
+(* The repo monitor of an instance: its caches live for the session. *)
+let repo_ctx ctx inst =
+  let key = Uri.to_string (Instance.base inst) in
+  match Hashtbl.find_opt ctx.repos key with
+  | Some r -> r
+  | None ->
+      let jobs = Jobs.create ~clock:ctx.clock inst in
+      Jobs.load jobs;
+      let r = Repo_monitor.create ~jobs ~github:ctx.github in
+      Hashtbl.replace ctx.repos key r;
+      r
+
 let repo_status ctx args =
   let inst = instance ctx args in
-  let repo =
-    match arg_string args "repo" with
-    | Some r when Target.valid_repo r -> r
-    | Some r -> fail "not an owner/repo: %s" r
-    | None -> fail "missing argument: repo"
-  in
+  let repo = repo_arg args in
   let recent = 3600. *. Option.value (arg_float args "recent_hours") ~default:24. in
-  let key = Uri.to_string (Instance.base inst) in
-  let rctx =
-    match Hashtbl.find_opt ctx.repos key with
-    | Some r -> r
-    | None ->
-        let jobs = Jobs.create ~clock:ctx.clock inst in
-        Jobs.load jobs;
-        let r = Repo_monitor.create ~jobs ~github:ctx.github in
-        Hashtbl.replace ctx.repos key r;
-        r
-  in
-  match Repo_monitor.snapshot rctx ~repo ~recent () with
+  match Repo_monitor.snapshot (repo_ctx ctx inst) ~repo ~recent () with
   | Error e -> fail "%s" e
   | Ok s -> ok_json (Json.repo ~job_url:(job_url inst) s)
+
+let pr_timeline ctx args =
+  let inst = instance ctx args in
+  let repo = repo_arg args in
+  let number =
+    match arg_float args "pr" with
+    | Some n -> int_of_float n
+    | None -> fail "missing argument: pr"
+  in
+  let rctx = repo_ctx ctx inst in
+  let snap =
+    match Repo_monitor.snapshot rctx ~repo () with Ok s -> s | Error e -> fail "%s" e
+  in
+  match Lifecycle_data.pr ctx.github ~repo ~feeds:snap.feeds ~number with
+  | Error e -> fail "%s" e
+  | Ok (p, github_steps) ->
+      let now = Unix.gettimeofday () in
+      let found =
+        List.find_map
+          (fun (b : Repo_monitor.branch) ->
+            List.find_map
+              (fun (e : Repo_state.entry) ->
+                match e.pr with Some q when q.number = number -> Some (b, e) | _ -> None)
+              b.entries)
+          snap.branches
+      in
+      let time_of_since s =
+        try
+          Scanf.sscanf s "%4d-%2d-%2d %2d:%2d.%2d" (fun y mo d h mi se ->
+              Option.map Ptime.to_float_s
+                (Ptime.of_date_time ((y, mo, d), ((h, mi, se), 0))))
+        with _ -> None
+      in
+      let deploy_steps, state =
+        match found with
+        | Some (b, ({ state = Live (Some at); _ } as _e)) -> (
+            match List.find_opt (fun (d : Repo_state.deploy) -> d.at = at) b.deploys with
+            | Some d ->
+                ( Lifecycle.of_stages ~now
+                    (Deploys.stages_of (Repo_monitor.jobs rctx) ~stages:b.stages d)
+                    ~time_of_since
+                  @ [
+                      Lifecycle.step
+                        ?time:(Jobs.seconds_of_key (Jobs.time_key at))
+                        ~key:"live" ~status:Lifecycle.Done "live";
+                    ],
+                  "live" )
+            | None -> ([], "live"))
+        | Some (b, e) -> (
+            let target = { Tracker.repo; branch = b.branch; sha = Some e.commit.sha } in
+            let cfg =
+              {
+                Monitor.instance = inst;
+                github = Some ctx.github;
+                target;
+                interval = 0.;
+                timeout = 0.;
+                follow_logs = false;
+              }
+            in
+            match Monitor.snapshot ~clock:ctx.clock cfg with
+            | Some (t, _) ->
+                ( Lifecycle.of_stages ~now (Tracker.stages t) ~time_of_since,
+                  Repo_state.state_to_string e.state )
+            | None -> ([], Repo_state.state_to_string e.state))
+        | None ->
+            ( [],
+              match p.p_merged with
+              | Some _ -> "live (deployed before the recent window)"
+              | None -> if p.p_state = "closed" then "closed" else "open" )
+      in
+      let steps = Lifecycle.with_durations (github_steps @ deploy_steps) in
+      ok_json (Json.timeline ~repo ~number ~title:p.p_title ~state steps)
 
 (* ---------- JSON-RPC ---------- *)
 
@@ -473,6 +559,7 @@ let run ~env ~web ~instance:default_instance =
       | "pipeline_status" -> pipeline_status ctx args
       | "job_log" -> job_log ctx args
       | "repo_status" -> repo_status ctx args
+      | "pr_timeline" -> pr_timeline ctx args
       | n -> fail "unknown tool: %s" n
     in
     Eio.Fiber.fork ~sw (fun () ->

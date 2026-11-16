@@ -1,6 +1,14 @@
-type t = { web : Web.t; token : string option; api : Uri.t }
+type t = {
+  web : Web.t;
+  token : string option;
+  api : Uri.t;
+  etags : (string, string * Yojson.Safe.t) Hashtbl.t;
+      (** path -> ETag and body: a conditional request answered 304 does not count against
+          the rate limit *)
+}
 
-let make ?token web = { web; token; api = Uri.of_string "https://api.github.com" }
+let make ?token web =
+  { web; token; api = Uri.of_string "https://api.github.com"; etags = Hashtbl.create 32 }
 
 let token_from_env () =
   let env k =
@@ -30,11 +38,27 @@ let get_json t path =
     | Some tok -> [ ("Authorization", "Bearer " ^ tok) ]
     | None -> [])
   in
-  match Web.get ~headers t.web (Uri.of_string (Uri.to_string t.api ^ path)) with
+  let cached = Hashtbl.find_opt t.etags path in
+  let headers =
+    match cached with
+    | Some (etag, _) -> ("If-None-Match", etag) :: headers
+    | None -> headers
+  in
+  match Web.get_full ~headers t.web (Uri.of_string (Uri.to_string t.api ^ path)) with
   | Error _ as e -> e
-  | Ok (200, body) -> (
-      try Ok (Yojson.Safe.from_string body) with Yojson.Json_error e -> Error e)
-  | Ok (s, body) ->
+  | Ok (304, _, _) -> (
+      match cached with
+      | Some (_, j) -> Ok j
+      | None -> Error ("GitHub " ^ path ^ ": 304 without a cached reply"))
+  | Ok (200, h, body) -> (
+      try
+        let j = Yojson.Safe.from_string body in
+        (match Http.Header.get h "etag" with
+        | Some e -> Hashtbl.replace t.etags path (e, j)
+        | None -> ());
+        Ok j
+      with Yojson.Json_error e -> Error e)
+  | Ok (s, _, body) ->
       let msg =
         try
           Yojson.Safe.from_string body
@@ -185,3 +209,6 @@ let pulls_of_commit t ~repo ~sha ~base =
                     }
               | _ -> None))
       with Type_error (m, _) -> Error ("unexpected GitHub reply: " ^ m))
+
+let token t = t.token
+let web t = t.web

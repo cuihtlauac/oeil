@@ -98,10 +98,89 @@ let entry (e : Repo_state.entry) =
     @ [ ("commit", `String e.commit.sha) ]
     @ repo_state e.state)
 
+let iso t =
+  match Ptime.of_float_s t with
+  | Some p -> `String (Ptime.to_rfc3339 ~tz_offset_s:0 p)
+  | None -> `Null
+
+let feed ~now (f : Ci.feed) =
+  `Assoc
+    [
+      ("name", `String f.name);
+      ("workflow", `String f.path);
+      ("schedules", `List (List.map (fun (c : Cron.t) -> `String c.text) f.schedules));
+      ( "next_run",
+        match
+          List.filter_map (fun c -> Cron.next c ~now) f.schedules |> List.sort compare
+        with
+        | t :: _ -> iso t
+        | [] -> `Null );
+      ("bot_branch", opt str f.branch);
+      ("latest_pr", match Ci.last_pr f with Some n -> `Int n | None -> `Null);
+      ( "runs",
+        `List
+          (List.map
+             (fun ((r : Ci.run), o) ->
+               `Assoc
+                 [
+                   ("started", iso r.started);
+                   ("event", `String r.event);
+                   ("outcome", `String (Ci.outcome_to_string o));
+                   ("url", `String r.url);
+                 ])
+             f.runs) );
+    ]
+
+let timeline ~repo ~number ~title ~state (steps : Lifecycle.step list) =
+  let status = function
+    | Lifecycle.Done -> "done"
+    | Running -> "running"
+    | Failed -> "failed"
+    | Pending -> "pending"
+    | Waiting -> "waiting"
+  in
+  `Assoc
+    ([
+       ("repo", `String repo);
+       ("pr", `Int number);
+       ("title", `String title);
+       ("state", `String state);
+       ( "steps",
+         `List
+           (List.map
+              (fun (s : Lifecycle.step) ->
+                `Assoc
+                  [
+                    ("step", `String s.label);
+                    ("part_of_previous", `Bool (s.depth > 0));
+                    ("status", `String (status s.status));
+                    ("at", opt iso s.time);
+                    ("seconds", opt (fun d -> `Float (Float.round d)) s.duration);
+                    ("detail", `String s.detail);
+                    ( "log",
+                      match s.log with
+                      | Some (Lifecycle.Deployer_job j) ->
+                          `Assoc [ ("deployer_job", `String j) ]
+                      | Some (Actions_job j) -> `Assoc [ ("actions_job", `Int j) ]
+                      | None -> `Null );
+                  ])
+              steps) );
+     ]
+    @
+    match Lifecycle.summary steps with
+    | Some (total, waiting) ->
+        [
+          ("total_seconds", `Float (Float.round total));
+          ("waiting_for_review_seconds", `Float (Float.round waiting));
+        ]
+    | None -> [])
+
 let repo ~job_url (s : Oeil_net.Repo_monitor.t) =
+  let now = Unix.gettimeofday () in
   `Assoc
     [
       ("repo", `String s.repo);
+      ("feeds", `List (List.map (feed ~now) s.feeds));
       ( "branches",
         `List
           (List.map

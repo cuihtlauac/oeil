@@ -122,23 +122,163 @@ let table ~now ~live ~selected ~offset (b : RM.branch) =
     ]
     rows
 
+(* {1 Feeds} *)
+
+(* "36 5 * * *" -> "daily 05:36 UTC"; "0 1 * * MON" -> "MON 01:00 UTC". *)
+let schedule_text (f : Ci.feed) =
+  match f.schedules with
+  | [] -> "on push"
+  | c :: rest -> (
+      let more = if rest = [] then "" else Printf.sprintf " +%d" (List.length rest) in
+      match String.split_on_char ' ' c.text |> List.filter (( <> ) "") with
+      | [ mi; h; "*"; "*"; dow ]
+        when int_of_string_opt mi <> None && int_of_string_opt h <> None ->
+          let hm = Printf.sprintf "%02d:%02d" (int_of_string h) (int_of_string mi) in
+          (if dow = "*" then "daily " else dow ^ " ") ^ hm ^ " UTC" ^ more
+      | _ -> c.text ^ more)
+
+let outcome_view (o : Ci.outcome) =
+  match o with
+  | Failed _ -> View.role `Failed (text (Ci.outcome_to_string o))
+  | Opened _ | Updated _ -> View.role `Accent (text (Ci.outcome_to_string o))
+  | In_progress -> View.role `Warning (text "running")
+  | No_change | Succeeded -> muted (Ci.outcome_to_string o)
+
+let outcome_mark ~live (o : Ci.outcome) =
+  match o with
+  | Failed _ -> View.role `Failed (text "✗")
+  | In_progress -> View.role `Warning (if live then Spinner.view () else text "●")
+  | _ -> View.role `Succeeded (text "✔")
+
+(* Where the feed's latest PR is now: from the branch summaries when it is
+   active, else from GitHub. *)
+let pr_fate (s : RM.t) (f : Ci.feed) =
+  match Ci.last_pr f with
+  | None -> View.empty
+  | Some n -> (
+      let entry =
+        List.find_map
+          (fun (b : RM.branch) ->
+            List.find_opt
+              (fun (e : Repo_state.entry) ->
+                match e.pr with Some p -> p.number = n | None -> false)
+              b.entries)
+          s.branches
+      in
+      let label = "#" ^ string_of_int n ^ " " in
+      match entry with
+      | Some e -> (
+          match e.state with
+          | Live _ -> View.role `Succeeded (text (label ^ "live"))
+          | Waiting -> View.role `Warning (text (label ^ "waiting"))
+          | Deploying d -> View.role `Warning (text (label ^ d))
+          | Failed k -> View.role `Failed (text (label ^ "failed at " ^ k)))
+      | None -> (
+          match List.find_opt (fun (p : Ci.bot_pr) -> p.number = n) f.prs with
+          | Some { merged = Some _; _ } -> View.role `Succeeded (text (label ^ "live"))
+          | Some { closed = true; _ } -> muted (label ^ "closed")
+          | Some _ -> View.role `Warning (text (label ^ "open"))
+          | None -> muted label))
+
+let strip_view ~now ~days f =
+  View.concat
+    (List.map
+       (function
+         | Ci.Pr -> View.role `Accent (text "●")
+         | Changeless -> muted "○"
+         | Fail -> View.role `Failed (text "✗")
+         | Ok_run -> View.role `Succeeded (text "✔")
+         | No_run -> muted "·")
+       (Ci.strip ~days ~now f))
+
+(* Coarse: "45m", "16h", "6d". *)
+let coarse secs =
+  let s = int_of_float (Float.max 0. secs) in
+  if s < 3600 then Printf.sprintf "%dm" (max 1 (s / 60))
+  else if s < 86400 then Printf.sprintf "%dh" (s / 3600)
+  else Printf.sprintf "%dd" (s / 86400)
+
+(* The table drops the schedule column, then half the strip, as the
+   terminal narrows. *)
+let feeds_table ~now ~live ~selected (s : RM.t) =
+  View.fit (fun room ->
+      let width = Option.value (Room.width room) ~default:120 in
+      let with_schedule = width >= 120 in
+      let days = if width >= 90 then 14 else 7 in
+      let next (f : Ci.feed) =
+        match
+          List.filter_map (fun c -> Cron.next c ~now) f.schedules |> List.sort compare
+        with
+        | t :: _ -> muted ("in " ^ coarse (t -. now))
+        | [] -> muted "on push"
+      in
+      let col ?(keep = true) c = if keep then [ c ] else [] in
+      Table.view
+        ([
+           Table.column ~shrinkable:false (text "");
+           Table.column ~shrinkable:false (text "");
+           Table.column ~min_width:10 ~overflow:`Truncate (text "feed");
+         ]
+        @ col ~keep:with_schedule (Table.column ~overflow:`Truncate (text "schedule"))
+        @ [
+            Table.column ~shrinkable:false (text "last");
+            Table.column ~min_width:9 ~overflow:`Truncate (text "outcome");
+            Table.column ~min_width:9 ~overflow:`Truncate (text "its PR");
+            Table.column ~shrinkable:false ~align:`Right (text "next");
+            Table.column ~shrinkable:false (text (Printf.sprintf "%d days" days));
+          ])
+        (List.mapi
+           (fun i (f : Ci.feed) ->
+             let sel = i = selected in
+             let name = text f.name in
+             let last, outcome, m =
+               match f.runs with
+               | (r, o) :: _ ->
+                   ( muted (coarse (now -. r.started) ^ " ago"),
+                     outcome_view o,
+                     outcome_mark ~live o )
+               | [] -> (muted "-", View.empty, muted "·")
+             in
+             [
+               (if sel then text "›" else text " ");
+               m;
+               (if sel then View.styled Style.reverse name else name);
+             ]
+             @ (if with_schedule then [ muted (schedule_text f) ] else [])
+             @ [ last; outcome; pr_fate s f; next f; strip_view ~now ~days f ])
+           s.feeds))
+
 let body ~now ~live (m : Repo_model.t) =
   match m.snapshot with
   | None -> [ muted "  reading the pipeline, the deploy history and GitHub…" ]
   | Some s ->
-      let offset = ref 0 in
-      List.concat_map
-        (fun (b : RM.branch) ->
-          let t =
-            if b.entries = [] then
-              [ muted "  no PR merged since the last deploy, none deployed recently" ]
-            else [ table ~now ~live ~selected:m.selected ~offset:!offset b ]
-          in
-          offset := !offset + List.length b.entries;
-          [ branch_line ~now ~live b ]
-          @ t
-          @ List.map (fun e -> View.role `Warning (text ("  ⚠ " ^ e))) b.errors)
-        s.branches
+      let feeds =
+        match s.feeds with
+        | [] -> []
+        | _ ->
+            [
+              View.role `Header (text "feeds");
+              feeds_table ~now ~live ~selected:m.selected s;
+              muted "  ● opened or updated a PR  ○ no change  ✗ failed  ✔ ran  · no run";
+            ]
+      in
+      let errors =
+        List.map (fun e -> View.role `Warning (text ("  ⚠ " ^ e))) s.feed_errors
+      in
+      let offset = ref (List.length s.feeds) in
+      feeds @ errors
+      @ List.concat_map
+          (fun (b : RM.branch) ->
+            let t =
+              if b.entries = [] then
+                [ muted "  no PR merged since the last deploy, none deployed recently" ]
+              else [ table ~now ~live ~selected:m.selected ~offset:!offset b ]
+            in
+            offset := !offset + List.length b.entries;
+            [ branch_line ~now ~live b ]
+            @ t
+            @ List.map (fun e -> View.role `Warning (text ("  ⚠ " ^ e))) b.errors)
+          s.branches
 
 let header ~now ~live (m : Repo_model.t) =
   let status =
@@ -162,7 +302,7 @@ let view (m : Repo_model.t) =
         @ (match m.last_error with
           | Some e -> [ View.role `Warning (text ("⚠ " ^ e)) ]
           | None -> [])
-        @ [ muted "↑↓ select  ⏎ stages and logs  r refresh  q quit" ]))
+        @ [ muted "↑↓ select  ⏎ timeline and logs  r refresh  q quit" ]))
 
 let final (m : Repo_model.t) =
   let now = Unix.gettimeofday () in

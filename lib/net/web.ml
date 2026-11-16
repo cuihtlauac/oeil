@@ -38,7 +38,8 @@ let headers_of extra = Http.Header.of_list (("User-Agent", user_agent) :: extra)
 let error_of_exn uri e =
   Error (Printf.sprintf "%s: %s" (Uri.to_string uri) (Printexc.to_string e))
 
-let get ?(headers = []) t uri =
+(* [get_full] is the status, the response headers and the body. *)
+let get_full ?(headers = []) t uri =
   Log.debug (fun m -> m "GET %a" Uri.pp uri);
   match
     Eio.Switch.run @@ fun sw ->
@@ -46,11 +47,13 @@ let get ?(headers = []) t uri =
       Cohttp_eio.Client.get t.client ~sw ~headers:(headers_of headers) uri
     in
     let body = Eio.Buf_read.(parse_exn take_all) body ~max_size:(64 * 1024 * 1024) in
-    (Http.Status.to_int (Http.Response.status resp), body)
+    (Http.Status.to_int (Http.Response.status resp), Http.Response.headers resp, body)
   with
   | r -> Ok r
   | exception (Eio.Cancel.Cancelled _ as e) -> raise e
   | exception e -> error_of_exn uri e
+
+let get ?headers t uri = Result.map (fun (s, _, b) -> (s, b)) (get_full ?headers t uri)
 
 let stream ?(headers = []) t uri ~on_chunk =
   Log.debug (fun m -> m "GET (stream) %a" Uri.pp uri);

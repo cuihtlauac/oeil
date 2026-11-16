@@ -16,4 +16,5 @@
   yojson
   logs
   ptime
+  base64
   unix))

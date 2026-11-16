@@ -1,8 +1,10 @@
-(* oeil repo on a terminal: active PRs; Enter opens a PR's deployment. *)
+(* oeil repo on a terminal: feeds and active PRs; Enter opens the life of a
+   PR or a feed's latest run, and from there the logs. *)
 open Oeil
 open Oeil_net
 
-type nested = { screen : Watch_screen.t; stop : unit -> unit }
+type screen = Stages of Watch_screen.t | Life of Lifecycle_screen.t
+type nested = { screen : screen; stop : unit -> unit }
 
 let run ~env ~web ~instance ~github ~repo ~recent ~every () =
   let clock = Eio.Stdenv.clock env in
@@ -32,66 +34,121 @@ let run ~env ~web ~instance ~github ~repo ~recent ~every () =
         in
         loop ())
   in
-  let open_row (row : Repo_model.row) =
+  (* Run [fill] in a sub-switch for the screen it makes; leaving the screen
+     cancels it. *)
+  let open_screen make fill =
     let sw = Option.get !sw_ref in
-    let title =
-      match row.entry.pr with
-      | Some p -> Printf.sprintf "%s#%d %s → %s" repo p.number p.title row.branch
-      | None ->
-          Printf.sprintf "%s %s %s → %s" repo
-            (Render.short_sha row.entry.commit.sha)
-            row.entry.commit.message row.branch
-    in
-    let target = { Tracker.repo; branch = row.branch; sha = Some row.entry.commit.sha } in
-    (* A live PR shows the deploy that made it live; any other follows its
-       commit through the current one. *)
-    let past =
-      match (row.entry.state, !model.snapshot) with
-      | Live (Some at), Some snap -> (
-          match
-            List.find_opt
-              (fun (b : Repo_monitor.branch) -> b.branch = row.branch)
-              snap.branches
-          with
-          | Some b -> (
-              match
-                List.find_opt (fun (d : Repo_state.deploy) -> d.at = at) b.deploys
-              with
-              | Some d -> Some (b.stages, d)
-              | None -> None)
-          | None -> None)
-      | _ -> None
-    in
     Eio.Fiber.fork ~sw (fun () ->
         try
           Eio.Switch.run (fun sub ->
-              let w = Watch_screen.create ~sw:sub ~inst ~title ~dirty:!dirty_ref in
-              nested := Some { screen = w; stop = (fun () -> Eio.Switch.fail sub Exit) };
-              (match past with
-              | Some (stages, d) ->
-                  let when_ =
-                    match Jobs.seconds_of_key (Jobs.time_key d.at) with
-                    | Some t ->
-                        " · live since " ^ Render.clock_time ~now:(Unix.gettimeofday ()) t
-                    | None -> ""
-                  in
-                  let title = title ^ when_ in
-                  Watch_screen.set w (fun m -> { m with title; phase = Resolving });
-                  Watch_screen.show_deploy w ~title (Deploys.stages_of jobs ~stages d)
-              | None ->
-                  Watch_screen.monitor w ~clock ~github ~target ~title ~interval:10.
-                    ~timeout:86400.);
-              (* Keep following logs after the deployment ended. *)
+              let s = make sub in
+              nested := Some { screen = s; stop = (fun () -> Eio.Switch.fail sub Exit) };
+              fill s;
+              (* Keep following logs after it ended. *)
               Eio.Fiber.await_cancel ())
         with Exit -> ())
   in
+  let snapshot () = !model.snapshot in
+  let feeds () = match snapshot () with Some s -> s.feeds | None -> [] in
+  let branch name =
+    Option.bind (snapshot ()) (fun s ->
+        List.find_opt (fun (b : Repo_monitor.branch) -> b.branch = name) s.branches)
+  in
+  let entry_of_pr number =
+    Option.bind (snapshot ()) (fun s ->
+        List.find_map
+          (fun (b : Repo_monitor.branch) ->
+            List.find_map
+              (fun (e : Repo_state.entry) ->
+                match e.pr with
+                | Some p when p.number = number -> Some (b.branch, e)
+                | _ -> None)
+              b.entries)
+          s.branches)
+  in
+  (* The life of PR [number]: GitHub, then its deploy. *)
+  let open_pr ~title ~number ~entry =
+    let deploy =
+      match entry with
+      | Some (br, (e : Repo_state.entry)) -> (
+          match e.state with
+          | Live (Some at) -> (
+              match branch br with
+              | Some b -> (
+                  match
+                    List.find_opt (fun (d : Repo_state.deploy) -> d.at = at) b.deploys
+                  with
+                  | Some d -> `Past (b.stages, d)
+                  | None -> `None)
+              | None -> `None)
+          | Live None -> `None
+          | Waiting | Deploying _ | Failed _ ->
+              `Follow { Tracker.repo; branch = br; sha = Some e.commit.sha })
+      | None -> `None
+    in
+    open_screen
+      (fun sw ->
+        Life (Lifecycle_screen.create ~sw ~dirty:!dirty_ref ~repo ~gh:github ~inst ~title))
+      (function
+        | Life t ->
+            Lifecycle_screen.fill_pr t ~clock ~jobs ~feeds:(feeds ()) ~number ~deploy
+        | Stages _ -> ())
+  in
+  let open_row = function
+    | Repo_model.Pr { branch = br; entry = { pr = Some p; _ } as e } ->
+        open_pr
+          ~title:(Printf.sprintf "%s#%d %s → %s" repo p.number p.title br)
+          ~number:p.number
+          ~entry:(Some (br, e))
+    | Pr { branch = br; entry = e } ->
+        (* A commit pushed without a PR: its deploy only. *)
+        let title =
+          Printf.sprintf "%s %s %s → %s" repo
+            (Render.short_sha e.commit.sha)
+            e.commit.message br
+        in
+        let target = { Tracker.repo; branch = br; sha = Some e.commit.sha } in
+        open_screen
+          (fun sw -> Stages (Watch_screen.create ~sw ~inst ~title ~dirty:!dirty_ref))
+          (function
+            | Stages w ->
+                Watch_screen.monitor w ~clock ~github ~target ~title ~interval:10.
+                  ~timeout:86400.
+            | Life _ -> ())
+    | Feed f -> (
+        (* Its latest PR, from the run that opened it to production; or, if
+           it never opened one, its latest run. *)
+        match (Ci.last_pr f, f.runs) with
+        | Some n, _ ->
+            let title = Printf.sprintf "%s · %s → #%d" repo f.name n in
+            open_pr ~title ~number:n ~entry:(entry_of_pr n)
+        | None, run :: _ ->
+            let title = Printf.sprintf "%s · %s, latest run" repo f.name in
+            open_screen
+              (fun sw ->
+                Life
+                  (Lifecycle_screen.create ~sw ~dirty:!dirty_ref ~repo ~gh:github ~inst
+                     ~title))
+              (function
+                | Life t -> Lifecycle_screen.fill_run t ~feed:f run | Stages _ -> ())
+        | None, [] -> ())
+  in
+  let leave n =
+    nested := None;
+    n.stop ()
+  in
   let on_key ~page k =
     match !nested with
-    | Some n -> (
-        match Watch_screen.key n.screen ~page k with
+    | Some ({ screen = Stages w; _ } as n) -> (
+        match Watch_screen.key w ~page k with
         | `Quit ->
-            nested := None;
-            n.stop ();
+            leave n;
+            `Continue
+        | `Continue -> `Continue)
+    | Some ({ screen = Life t; _ } as n) -> (
+        match Lifecycle_screen.key t ~page k with
+        | `Quit ->
+            leave n;
             `Continue
         | `Continue -> `Continue)
     | None -> (
@@ -110,7 +167,8 @@ let run ~env ~web ~instance ~github ~repo ~recent ~every () =
   in
   let view () =
     match !nested with
-    | Some n -> Watch_screen.view n.screen
+    | Some { screen = Stages w; _ } -> Watch_screen.view w
+    | Some { screen = Life t; _ } -> Lifecycle_screen.view t
     | None -> Repo_render.view !model
   in
   let final () = Repo_render.final !model in

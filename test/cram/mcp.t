@@ -14,7 +14,7 @@ touching the network.
   $ GITHUB_TOKEN=unused oeil mcp < requests > replies
   $ jq -c 'if .result.tools then {id, tools: [.result.tools[].name]} elif .result.serverInfo then {id, version: .result.protocolVersion, server: .result.serverInfo.name} else . end' replies | sort
   {"id":1,"version":"2025-06-18","server":"oeil"}
-  {"id":3,"tools":["deploy_status","wait_for_deploy","pipeline_status","repo_status","job_log"]}
+  {"id":3,"tools":["deploy_status","wait_for_deploy","pipeline_status","repo_status","pr_timeline","job_log"]}
   {"jsonrpc":"2.0","id":2,"result":{}}
   {"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"cannot parse target \"not a target\": expected owner/repo#PR, owner/repo@SHA or owner/repo:branch"}],"isError":true}}
   {"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"unknown tool: nope"}],"isError":true}}
