@@ -26,10 +26,42 @@ ocaml/ocaml.org staging (latest)
 
 followed by a summary table of every stage, its status and its job.
 
-While a job runs, its latest log lines are shown under its row, and they
-fold away when it succeeds. Output goes into the scrollback, not a full-screen
-UI ([console](https://github.com/samoht/ocaml-console)). On a pipe or in CI
-it prints plain lines, and `--progress json` prints JSON events.
+On a terminal, `oeil watch` is interactive: a live table of the stages,
+redrawn at the bottom of the terminal
+([console](https://github.com/samoht/ocaml-console)), where you can open the
+log of any stage:
+
+```
+ocaml/ocaml.org main @ 823ea15fa   ✔ deployed
+╭───┬───┬─────────────────────┬────────┬────────┬──────────╮
+│   │   │ stage               │ status │ job    │     time │
+├───┼───┼─────────────────────┼────────┼────────┼──────────┤
+│ › │ ✔ │ build linux-x86_64  │ done   │ d516d2 │ 10:23:52 │
+│   │ ✔ │ push ocurrent/      │ done   │ b8237c │ 10:44:07 │
+│   │   │ v3.ocaml.org-server │        │        │          │
+│   │   │ :live               │        │        │          │
+│   │ ✔ │ pull for infra_www2 │ done   │ 4f0aba │ 10:44:30 │
+│   │ ✔ │ pull for infra_www1 │ done   │ 4f0aba │ 10:44:30 │
+│   │ ✔ │ service infra_www2  │ done   │ e3b420 │ 10:45:13 │
+│   │ ✔ │ service infra_www1  │ done   │ 037a51 │ 10:45:13 │
+│   │ ✔ │ notify              │ done   │ 53af31 │ 10:45:24 │
+╰───┴───┴─────────────────────┴────────┴────────┴──────────╯
+↑↓ select  ⏎ log  q quit
+```
+
+| Where | Keys |
+|---|---|
+| summary | `↑`/`↓` or `k`/`j` select a stage, `⏎` or `→` open its log, `q` or `Esc` quit |
+| log | `↑`/`↓`, `PgUp`/`PgDn` scroll (pauses following), `g` top, `G` follow the end again, `Esc`, `←` or `q` back to the summary |
+
+A running job's log is followed live. When the deployment ends, the verdict
+shows in the header and the view stays open until you quit; the summary is
+left in the scrollback.
+
+With `--rows`, on a pipe, or with `--progress plain|quiet|json|tty`, it
+prints scrolling rows instead: a running job's latest log lines show under
+its row and fold away when it succeeds, and `--progress json` prints JSON
+events.
 
 ## Install
 
@@ -54,8 +86,9 @@ dune install   # or: dune exec -- oeil …
 
 `--instance URL` selects another OCurrent service (default
 `https://deploy.ci.ocaml.org`). `watch` exits with 0 when the commit is deployed,
-1 when the deploy failed, 2 on timeout (`--timeout`, default 1 h), and 3 on a
-bad target or an unreachable service.
+1 when the deploy failed, 2 on timeout (`--timeout`, default 1 h), 3 on a
+bad target or an unreachable service, and 4 when you quit the interactive
+view before the deployment ended.
 
 GitHub is used to resolve a PR to its merge commit, and to check whether a
 newer commit that got deployed instead includes yours. A token is taken from

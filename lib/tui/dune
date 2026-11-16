@@ -1,0 +1,4 @@
+(library
+ (name oeil_tui)
+ (public_name oeil.tui)
+ (libraries oeil oeil.net console console-eio eio ptime unix))

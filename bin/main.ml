@@ -288,10 +288,27 @@ let summary tracker =
     ]
     rows
 
-let watch instance target branch interval timeout progress no_logs verbose =
+let interactive instance target branch interval timeout =
+  with_env @@ fun env web ->
+  let github = Github.make ?token:(Github.token_from_env ()) web in
+  match
+    Oeil_tui.App.run ~env ~web ~instance ~github ~target ?branch ~interval ~timeout ()
+  with
+  | `Deployed -> 0
+  | `Failed _ -> 1
+  | `Timeout -> 2
+  | `Error e -> exit_error e
+  | `Quit -> 4
+
+let watch instance target branch interval timeout progress no_logs rows verbose =
   setup_logs verbose;
   match Target.parse target with
   | Error e -> exit_error e
+  | Ok target
+    when (not rows) && progress = `Auto && Unix.isatty Unix.stdin
+         && Option.is_some (Console_eio.size Fmt.stderr) ->
+      Console_tty.setup ();
+      interactive instance target branch interval timeout
   | Ok target -> (
       with_env @@ fun env web ->
       let clock = Eio.Stdenv.clock env in
@@ -403,6 +420,15 @@ let watch_cmd =
   let no_logs =
     Arg.(value & flag & info [ "no-logs" ] ~doc:"Do not stream the logs of running jobs.")
   in
+  let rows =
+    Arg.(
+      value & flag
+      & info [ "rows" ]
+          ~doc:
+            "Print scrolling rows instead of the interactive view, as on a pipe. The \
+             interactive view is used when standard input and error are terminals and \
+             $(b,--progress) is auto.")
+  in
   let exits =
     Cmd.Exit.
       [
@@ -410,13 +436,14 @@ let watch_cmd =
         info 1 ~doc:"the deployment failed.";
         info 2 ~doc:"timed out.";
         info 3 ~doc:"bad target or unreachable service.";
+        info 4 ~doc:"quit (q) before the deployment finished.";
       ]
   in
   Cmd.v
     (Cmd.info "watch" ~exits ~doc:"Follow a pull request or commit until it is deployed.")
     Term.(
       const watch $ instance_arg $ target $ branch $ interval $ timeout $ progress
-      $ no_logs $ verbose_arg)
+      $ no_logs $ rows $ verbose_arg)
 
 (* ---------- mcp ---------- *)
 

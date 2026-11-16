@@ -1,5 +1,5 @@
-(test
- (name test_oeil)
- (libraries oeil alcotest)
+(tests
+ (names test_oeil test_tui)
+ (libraries oeil oeil.tui eio alcotest)
  (deps
   (glob_files fixtures/*)))
