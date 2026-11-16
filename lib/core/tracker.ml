@@ -246,15 +246,33 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
         | _ -> None)
       stages
   in
+  (* The deployer also posts when a deploy starts: a post is the final
+     notification only once every other stage is final, and only if it came
+     after the latest of their jobs. *)
+  let others = build_views @ push_views @ deploy_views in
+  let others_final =
+    others <> [] && List.for_all (fun (v : stage) -> is_final v.status) others
+  in
+  let latest_job =
+    List.fold_left
+      (fun acc (v : stage) ->
+        match v.job with
+        | Some j when v.status <> Unchanged -> max acc (time_key j)
+        | _ -> acc)
+      (Option.value !build_time ~default:"")
+      others
+  in
   let notify_views =
     List.filter_map
       (fun (s : Chain.stage) ->
         match s.kind with
         | Chain.Notify ->
             let ours =
-              match (!build_time, s.node.job) with
-              | Some b, Some j -> time_key j >= b
-              | _ -> false
+              others_final
+              &&
+              match s.node.job with
+              | Some j -> time_key j >= latest_job
+              | None -> false
             in
             let st = if ours then status_of_ours s.node (facts_of s) else Pending in
             Some (stage_view s st ~ours)

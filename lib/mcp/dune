@@ -1,0 +1,4 @@
+(library
+ (name oeil_mcp)
+ (public_name oeil.mcp)
+ (libraries oeil oeil.net eio yojson logs))

@@ -1,0 +1,18 @@
+(library
+ (name oeil_net)
+ (public_name oeil.net)
+ (libraries
+  oeil
+  eio
+  cohttp-eio
+  tls-eio
+  tls
+  x509
+  domain-name
+  ca-certs
+  mirage-crypto-rng.unix
+  cstruct
+  uri
+  yojson
+  logs
+  unix))

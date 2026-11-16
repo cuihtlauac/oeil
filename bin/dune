@@ -1,0 +1,17 @@
+(executable
+ (name main)
+ (public_name oeil)
+ (package oeil)
+ (libraries
+  oeil
+  oeil.net
+  oeil.mcp
+  console
+  console.tty
+  console-eio
+  eio_main
+  cmdliner
+  logs
+  logs.fmt
+  fmt
+  fmt.tty))

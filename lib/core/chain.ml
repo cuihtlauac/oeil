@@ -14,8 +14,7 @@ let kind_name = function
   | Service _ -> "service"
   | Notify -> "notify"
 
-let describe s =
-  match s.kind with
+let kind_label = function
   | Build p -> "build " ^ p
   | Push t -> "push " ^ t
   | Pull "" -> "pull"
@@ -23,6 +22,7 @@ let describe s =
   | Service s -> "service " ^ s
   | Notify -> "notify"
 
+let describe s = kind_label s.kind
 let ref_label ~repo ~branch = [ repo; "refs/heads/" ^ branch ]
 
 let branches (g : Svg_graph.t) ~repo =

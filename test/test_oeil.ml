@@ -278,7 +278,7 @@ let test_in_progress () =
               update = Some State.Running;
             }
         | "service:infra_www2" -> { n with update = Some State.Ready }
-        | "notify" -> n
+        | "notify" -> { n with job = Some "2026-11-16/090100-slack-post-started" }
         | _ -> n)
   in
   let t = Tracker.create (target (Some "ea9bd21")) in
@@ -335,6 +335,29 @@ let test_sha_matches () =
     "different" false
     (Tracker.sha_matches "ea9bd22" "ea9bd215503464270bcc")
 
+(* --- Target --- *)
+
+let test_target () =
+  let ok s expected =
+    match Target.parse s with
+    | Ok t -> Alcotest.(check string) s expected (Target.to_string t)
+    | Error e -> Alcotest.failf "%s: %s" s e
+  in
+  let bad s =
+    match Target.parse s with
+    | Ok t -> Alcotest.failf "%s parsed as %s" s (Target.to_string t)
+    | Error _ -> ()
+  in
+  ok "ocaml/ocaml.org#1234" "ocaml/ocaml.org#1234";
+  ok "ocaml/ocaml.org@EA9BD2155" "ocaml/ocaml.org@ea9bd2155";
+  ok "ocaml/ocaml.org:staging" "ocaml/ocaml.org:staging";
+  ok "ocaml/ocaml.org" "ocaml/ocaml.org:main";
+  bad "ocaml.org#12";
+  bad "ocaml/ocaml.org#x";
+  bad "ocaml/ocaml.org@xyz";
+  bad "ocaml/ocaml.org@abc12";
+  bad "ocaml/ocaml.org:"
+
 let () =
   Alcotest.run "oeil"
     [
@@ -356,6 +379,7 @@ let () =
           Alcotest.test_case "failed" `Quick test_failed_log;
           Alcotest.test_case "stream" `Quick test_stream;
         ] );
+      ("target", [ Alcotest.test_case "parse" `Quick test_target ]);
       ( "tracker",
         [
           Alcotest.test_case "already deployed" `Quick test_already_deployed;

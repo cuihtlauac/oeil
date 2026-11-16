@@ -18,6 +18,9 @@ type stage = {
 val kind_name : kind -> string
 (** ["build"], ["push"], ["pull"], ["service"] or ["notify"]. *)
 
+val kind_label : kind -> string
+(** e.g. ["build linux-x86_64"], ["service infra_www1"]. *)
+
 val describe : stage -> string
 (** e.g. ["build linux-x86_64"], ["service infra_www1"]. *)
 
