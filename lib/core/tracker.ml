@@ -297,7 +297,7 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
   List.iter
     (fun (v : stage) ->
       let before = keep_previous v.key in
-      if before <> v.status || previous t v.key = None then
+      if before <> v.status then
         emit (Stage { key = v.key; before; after = v.status; job = v.job }))
     views;
   let verdict =

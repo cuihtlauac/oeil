@@ -23,30 +23,29 @@ let pipeline t ?query () = Result.bind (pipeline_svg t ?query ()) Svg_graph.pars
 let job_page t job = get_ok t (job_url t job)
 let job_log t job = Result.map Job_log.of_html (job_page t job)
 
-let follow_job t job ~on_line =
+let follow_job ?(stop = fun () -> false) t job ~on_line =
   let st = Job_log.Stream.create () in
   let r =
     Web.stream t.web (job_url t job) ~on_chunk:(fun chunk ->
         List.iter on_line (Job_log.Stream.feed st chunk);
-        if Job_log.Stream.finished st then `Stop else `Continue)
+        if Job_log.Stream.finished st || stop () then `Stop else `Continue)
   in
-  List.iter on_line (Job_log.Stream.finish st);
+  if not (stop ()) then List.iter on_line (Job_log.Stream.finish st);
   r
 
-exception Enough
-
-let job_head t ~clock ?(lines = 4) ?(timeout = 5.0) job =
+(* The first lines of a job's log. A running job's page only ends with the
+   job, so stop after [lines] lines or [timeout] seconds. *)
+let job_head t ~clock ?(lines = 6) ?(timeout = 5.0) job =
   let acc = ref [] in
   let n = ref 0 in
   let r =
     try
       Eio.Time.with_timeout_exn clock timeout (fun () ->
-          follow_job t job ~on_line:(fun l ->
+          follow_job t job
+            ~stop:(fun () -> !n >= lines)
+            ~on_line:(fun l ->
               acc := l :: !acc;
-              incr n;
-              if !n >= lines then raise Enough))
-    with
-    | Enough -> Ok ()
-    | Eio.Time.Timeout -> Ok ()
+              incr n))
+    with Eio.Time.Timeout -> Ok ()
   in
   Result.map (fun () -> List.rev !acc) r
