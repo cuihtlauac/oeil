@@ -324,6 +324,20 @@ let test_failure () =
     "finished event" true
     (List.exists (function Tracker.Finished (Failed_at _) -> true | _ -> false) events)
 
+let test_blocked () =
+  (* A node that never ran (no job) but is grey is blocked, not pending. *)
+  let stages =
+    rewrite (main_stages ()) (fun key (n : Svg_graph.node) ->
+        match key with
+        | "service:infra_www1" -> { n with job = None; state = State.Blocked }
+        | _ -> n)
+  in
+  let t = Tracker.create (target None) in
+  let t, _ = Tracker.step t ~stages ~facts:fixture_facts ~includes:no_includes in
+  Alcotest.(check (option string))
+    "blocked" (Some "blocked")
+    (List.assoc_opt "service:infra_www1" (statuses t))
+
 let test_sha_matches () =
   Alcotest.(check bool)
     "prefix" true
@@ -387,6 +401,7 @@ let () =
           Alcotest.test_case "superseded" `Quick test_superseded;
           Alcotest.test_case "in progress" `Quick test_in_progress;
           Alcotest.test_case "failure" `Quick test_failure;
+          Alcotest.test_case "blocked" `Quick test_blocked;
           Alcotest.test_case "sha prefix" `Quick test_sha_matches;
         ] );
     ]

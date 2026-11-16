@@ -271,19 +271,20 @@ let summary tracker =
         [
           mark;
           View.text (Chain.kind_label st.kind);
-          View.text (Tracker.status_to_string st.status);
+          View.text
+            (match st.status with
+            | Failed _ -> "failed"
+            | s -> Tracker.status_to_string s);
           View.role `Muted (View.text (Option.value st.job ~default:""));
-          View.role `Muted (View.text (Option.value st.since ~default:""));
         ])
       (Tracker.stages tracker)
   in
   Table.view
     [
-      Table.column (View.text "");
+      Table.column ~shrinkable:false (View.text "");
       Table.column (View.text "stage");
-      Table.column ~overflow:`Truncate (View.text "status");
-      Table.column (View.text "job");
-      Table.column (View.text "started");
+      Table.column ~shrinkable:false (View.text "status");
+      Table.column ~shrinkable:false (View.text "job");
     ]
     rows
 

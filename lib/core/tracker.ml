@@ -151,6 +151,13 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
   let keep_previous key =
     match previous t key with Some p -> p.status | None -> Pending
   in
+  (* No facts: a node without a job gets its status from its colour; one
+     whose log was not fetched keeps its previous status. *)
+  let without_facts (s : Chain.stage) ~upstream_ready =
+    match s.node.job with
+    | None -> status_of_other ~upstream_ready s.node
+    | Some _ -> keep_previous s.key
+  in
   let stage_view (s : Chain.stage) status ~ours =
     let f = facts_of s in
     {
@@ -192,7 +199,8 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
                   (stage_view s
                      (status_of_other ~upstream_ready:false s.node)
                      ~ours:false)
-            | None -> Some (stage_view s (keep_previous s.key) ~ours:false))
+            | None ->
+                Some (stage_view s (without_facts s ~upstream_ready:false) ~ours:false))
         | _ -> None)
       stages
   in
@@ -211,7 +219,7 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
         (st, f, true)
     | Some f -> (status_of_other ~upstream_ready s.node, f, false)
     | None ->
-        ( keep_previous s.key,
+        ( without_facts s ~upstream_ready,
           {
             Facts.commit = None;
             output = None;
