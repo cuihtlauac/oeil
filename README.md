@@ -10,17 +10,21 @@ oeil reads that diagram back into a graph, finds a branch's deployment chain
 commit through it. It ties each stage to the commit through the image
 digests in the job logs. It needs no credentials for the OCurrent service.
 
+For example, following the latest deploy of ocaml.org's `staging` branch
+on 2026-11-16, whose last run had failed (output on a pipe, abridged):
+
 ```
-$ oeil watch ocaml/ocaml.org#4019
-ocaml/ocaml.org#4019 data-packer: give each executable its own module → main @ 823ea15fa
-✓ picked up by the deployer  1.3s
-✓ build linux-x86_64  823ea15fa → sha256:3f1c0e2b…
-✓ push ocurrent/v3.ocaml.org-server:live  → sha256:9b7d41aa…
-✓ pull for infra_www2  2026-11-16/094012-docker-pull-1c2d3e
-✓ service infra_www2  2026-11-16/094031-docker-service-0a1b2c
-…
-✓ deployed: ocaml/ocaml.org#4019 …
+$ oeil watch ocaml/ocaml.org:staging --no-logs
+ocaml/ocaml.org staging (latest)
+✓ picked up by the deployer  0.8s
+✓ build linux-x86_64  e5b458339 → sha256:82fcd59ab930…  0.0s
+✓ push ocurrent/v3.ocaml.org-server:staging  → sha256:0463d1dc4d3a…  0.0s
+  ✗ pull for infra_www: Command "docker" "--context" "v3c.ocaml.org" "pull" …
+✗ pull for infra_www  failed  2026-11-02/180130-docker-pull-c468ac  0.0s  failed
+✗ deployment failed at pull:infra_www
 ```
+
+followed by a summary table of every stage, its status and its job.
 
 While a job runs, its latest log lines are shown under its row, and they
 fold away when it succeeds. Output goes into the scrollback, not a full-screen
