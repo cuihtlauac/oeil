@@ -257,3 +257,39 @@ let outcome log =
           | None -> go ls)
   in
   go tail
+
+let contains s ~sub = Option.is_some (find_sub s sub)
+
+(* The rows of the HTML tables in [page], each a list of its cells' text. *)
+let table_rows page =
+  let rec rows from acc =
+    match find_sub ~from page "<tr" with
+    | None -> List.rev acc
+    | Some i ->
+        let stop =
+          match find_sub ~from:(i + 3) page "</tr>" with
+          | Some j -> j
+          | None -> String.length page
+        in
+        let row = String.sub page i (stop - i) in
+        let rec cells from acc =
+          match find_sub ~from row "<td" with
+          | None -> List.rev acc
+          | Some k -> (
+              match String.index_from_opt row k '>' with
+              | None -> List.rev acc
+              | Some open_end ->
+                  let close =
+                    match find_sub ~from:open_end row "</td>" with
+                    | Some c -> c
+                    | None -> String.length row
+                  in
+                  let cell =
+                    String.trim
+                      (strip (String.sub row (open_end + 1) (close - open_end - 1)))
+                  in
+                  cells close (cell :: acc))
+        in
+        rows stop (cells 0 [] :: acc)
+  in
+  rows 0 [] |> List.filter (fun r -> r <> [])

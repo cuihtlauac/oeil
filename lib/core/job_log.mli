@@ -60,3 +60,9 @@ val outcome : string list -> [ `Succeeded | `Failed of string | `Cancelled | `Un
 
 val timestamp : string -> string option
 (** [timestamp line] is the ["2026-11-16 07:18.46"] prefix of a log line. *)
+
+val contains : string -> sub:string -> bool
+
+val table_rows : string -> string list list
+(** [table_rows page] is the rows of the HTML tables in [page], each the text of its
+    [<td>] cells. Rows without cells (headers) are left out. *)

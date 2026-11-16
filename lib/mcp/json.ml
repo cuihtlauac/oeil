@@ -76,3 +76,58 @@ let node (n : Svg_graph.node) =
       ("expand", opt str n.expand);
       ("error", opt str n.tooltip);
     ]
+
+let repo_state (s : Repo_state.state) =
+  match s with
+  | Waiting -> [ ("state", `String "waiting") ]
+  | Deploying d -> [ ("state", `String "deploying"); ("stage", `String d) ]
+  | Failed k -> [ ("state", `String "failed"); ("failed_stage", `String k) ]
+  | Live at -> [ ("state", `String "live"); ("live_since", opt str at) ]
+
+let entry (e : Repo_state.entry) =
+  `Assoc
+    ((match e.pr with
+       | Some p ->
+           [
+             ("pr", `Int p.number);
+             ("title", `String p.title);
+             ("author", `String p.author);
+             ("merged_at", `String p.merged_at);
+           ]
+       | None -> [ ("pr", `Null); ("title", `String e.commit.message) ])
+    @ [ ("commit", `String e.commit.sha) ]
+    @ repo_state e.state)
+
+let repo ~job_url (s : Oeil_net.Repo_monitor.t) =
+  `Assoc
+    [
+      ("repo", `String s.repo);
+      ( "branches",
+        `List
+          (List.map
+             (fun (b : Oeil_net.Repo_monitor.branch) ->
+               `Assoc
+                 [
+                   ("branch", `String b.branch);
+                   ("live_commit", opt str b.live);
+                   ("live_since", opt str b.live_since);
+                   ("head", opt str b.head);
+                   ( "latest_build",
+                     match b.tracker with
+                     | None -> `Null
+                     | Some t -> (
+                         match verdict (Tracker.verdict t) with
+                         | `Assoc v ->
+                             `Assoc
+                               ((("commit", opt str (Tracker.commit t)) :: v)
+                               @ [
+                                   ( "stages",
+                                     `List (List.map (stage ~job_url) (Tracker.stages t))
+                                   );
+                                 ])
+                         | j -> j) );
+                   ("prs", `List (List.map entry b.entries));
+                   ("errors", `List (List.map str b.errors));
+                 ])
+             s.branches) );
+    ]

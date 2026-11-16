@@ -76,6 +76,20 @@ let tools =
         ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
       ]
       [];
+    tool "repo_status"
+      "The deploy state of a repository's merged PRs, per deployed branch: every PR not \
+       live yet (waiting for the deployer, deploying with its current stage, or failed), \
+       whatever its age, and those that went live in the last recent_hours. Also the \
+       live commit and the build in flight. A PR's state comes from where its merge \
+       commit sits relative to the live commit, not from its merge date."
+      [
+        ("repo", prop "owner/repo, e.g. ocaml/ocaml.org.");
+        ( "recent_hours",
+          prop ~typ:"number" "List PRs that went live this many hours back (default 24)."
+        );
+        ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
+      ]
+      [ "repo" ];
     tool "job_log" "The log of a job (by default its last 200 lines)."
       [
         ("job", prop "Job id, e.g. 2026-11-16/071954-docker-service-f92f02.");
@@ -138,6 +152,8 @@ type ctx = {
   web : Web.t;
   github : Github.t;
   default_instance : string;
+  repos : (string, Repo_monitor.ctx) Hashtbl.t;
+      (** by instance: caches live for the session *)
 }
 
 let instance ctx args =
@@ -372,6 +388,30 @@ let job_log ctx args =
       in
       ok_text (String.concat "\n" lines)
 
+let repo_status ctx args =
+  let inst = instance ctx args in
+  let repo =
+    match arg_string args "repo" with
+    | Some r when Target.valid_repo r -> r
+    | Some r -> fail "not an owner/repo: %s" r
+    | None -> fail "missing argument: repo"
+  in
+  let recent = 3600. *. Option.value (arg_float args "recent_hours") ~default:24. in
+  let key = Uri.to_string (Instance.base inst) in
+  let rctx =
+    match Hashtbl.find_opt ctx.repos key with
+    | Some r -> r
+    | None ->
+        let jobs = Jobs.create ~clock:ctx.clock inst in
+        Jobs.load jobs;
+        let r = Repo_monitor.create ~jobs ~github:ctx.github in
+        Hashtbl.replace ctx.repos key r;
+        r
+  in
+  match Repo_monitor.snapshot rctx ~repo ~recent () with
+  | Error e -> fail "%s" e
+  | Ok s -> ok_json (Json.repo ~job_url:(job_url inst) s)
+
 (* ---------- JSON-RPC ---------- *)
 
 exception Cancelled_by_client
@@ -380,7 +420,7 @@ let run ~env ~web ~instance:default_instance =
   let clock = (Eio.Stdenv.clock env :> float Eio.Time.clock_ty Eio.Resource.t) in
   let stdout = Eio.Stdenv.stdout env in
   let github = Github.make ?token:(Github.token_from_env ()) web in
-  let ctx = { clock; web; github; default_instance } in
+  let ctx = { clock; web; github; default_instance; repos = Hashtbl.create 2 } in
   let mutex = Eio.Mutex.create () in
   let send (json : Yojson.Safe.t) =
     Eio.Mutex.use_rw ~protect:true mutex (fun () ->
@@ -432,6 +472,7 @@ let run ~env ~web ~instance:default_instance =
       | "wait_for_deploy" -> wait_for_deploy ctx ~progress args
       | "pipeline_status" -> pipeline_status ctx args
       | "job_log" -> job_log ctx args
+      | "repo_status" -> repo_status ctx args
       | n -> fail "unknown tool: %s" n
     in
     Eio.Fiber.fork ~sw (fun () ->

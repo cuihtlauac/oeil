@@ -30,7 +30,7 @@ let get_json t path =
     | Some tok -> [ ("Authorization", "Bearer " ^ tok) ]
     | None -> [])
   in
-  match Web.get ~headers t.web (Uri.with_path t.api path) with
+  match Web.get ~headers t.web (Uri.of_string (Uri.to_string t.api ^ path)) with
   | Error _ as e -> e
   | Ok (200, body) -> (
       try Ok (Yojson.Safe.from_string body) with Yojson.Json_error e -> Error e)
@@ -89,3 +89,99 @@ let includes t ~repo ~commit ~newer =
       | Some ("ahead" | "identical") -> Ok true
       | Some _ -> Ok false
       | None -> Error "unexpected GitHub compare reply")
+
+let head t ~repo ~branch = commit t ~repo ~ref_:("heads/" ^ branch)
+
+let to_commit j : Oeil.Repo_state.commit =
+  let open Yojson.Safe.Util in
+  let message = j |> member "commit" |> member "message" |> to_string in
+  let first =
+    match String.index_opt message '\n' with
+    | Some i -> String.sub message 0 i
+    | None -> message
+  in
+  {
+    sha = j |> member "sha" |> to_string;
+    parents =
+      j |> member "parents" |> to_list
+      |> List.map (fun p -> p |> member "sha" |> to_string);
+    message = first;
+    date =
+      (try j |> member "commit" |> member "committer" |> member "date" |> to_string
+       with _ -> "");
+  }
+
+(* Commits in [head] but not in [base], oldest first (GitHub caps the list
+   at 250). *)
+let compare_commits t ~repo ~base ~head =
+  let open Yojson.Safe.Util in
+  Result.bind
+    (get_json t (Printf.sprintf "/repos/%s/compare/%s...%s?per_page=250" repo base head))
+    (fun j ->
+      try
+        Ok
+          ( j |> member "status" |> to_string,
+            j |> member "commits" |> to_list |> List.map to_commit )
+      with Type_error (m, _) -> Error ("unexpected GitHub compare reply: " ^ m))
+
+(* Merged pull requests into [base], most recently updated first. *)
+let merged_pulls t ~repo ~base ?(per_page = 100) () =
+  let open Yojson.Safe.Util in
+  Result.bind
+    (get_json t
+       (Printf.sprintf
+          "/repos/%s/pulls?state=closed&base=%s&sort=updated&direction=desc&per_page=%d"
+          repo base per_page))
+    (fun j ->
+      try
+        Ok
+          (j |> to_list
+          |> List.filter_map (fun p ->
+              match
+                ( p |> member "merged_at" |> to_string_option,
+                  p |> member "merge_commit_sha" |> to_string_option )
+              with
+              | Some merged_at, Some merge_commit ->
+                  Some
+                    {
+                      Oeil.Repo_state.number = p |> member "number" |> to_int;
+                      title = p |> member "title" |> to_string;
+                      merge_commit;
+                      merged_at;
+                      author =
+                        (try p |> member "user" |> member "login" |> to_string
+                         with _ -> "");
+                    }
+              | _ -> None))
+      with Type_error (m, _) -> Error ("unexpected GitHub pulls reply: " ^ m))
+
+let has_token t = Option.is_some t.token
+
+(* Merged pull requests into [base] that contain commit [sha]. *)
+let pulls_of_commit t ~repo ~sha ~base =
+  let open Yojson.Safe.Util in
+  Result.bind
+    (get_json t (Printf.sprintf "/repos/%s/commits/%s/pulls" repo sha))
+    (fun j ->
+      try
+        Ok
+          (j |> to_list
+          |> List.filter_map (fun p ->
+              match
+                ( p |> member "merged_at" |> to_string_option,
+                  p |> member "merge_commit_sha" |> to_string_option,
+                  p |> member "base" |> member "ref" |> to_string_option )
+              with
+              | Some merged_at, Some merge_commit, Some b when b = base ->
+                  Some
+                    {
+                      Oeil.Repo_state.number = p |> member "number" |> to_int;
+                      title = p |> member "title" |> to_string;
+                      merge_commit;
+                      merged_at;
+                      author =
+                        (try p |> member "user" |> member "login" |> to_string
+                         with _ -> "");
+                    }
+              | _ -> None))
+      with Type_error (m, _) -> Error ("unexpected GitHub reply: " ^ m))

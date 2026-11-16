@@ -325,18 +325,30 @@ let test_failure () =
     (List.exists (function Tracker.Finished (Failed_at _) -> true | _ -> false) events)
 
 let test_blocked () =
-  (* A node that never ran (no job) but is grey is blocked, not pending. *)
-  let stages =
-    rewrite (main_stages ()) (fun key (n : Svg_graph.node) ->
-        match key with
-        | "service:infra_www1" -> { n with job = None; state = State.Blocked }
-        | _ -> n)
+  (* A grey node that never ran is pending while its inputs are still
+     running, and blocked only behind a failure. *)
+  let grey key (n : Svg_graph.node) =
+    match key with
+    | "service:infra_www1" -> { n with job = None; state = State.Blocked }
+    | _ -> n
   in
-  let t = Tracker.create (target None) in
-  let t, _ = Tracker.step t ~stages ~facts:fixture_facts ~includes:no_includes in
+  let status stages =
+    let t = Tracker.create (target None) in
+    let t, _ = Tracker.step t ~stages ~facts:fixture_facts ~includes:no_includes in
+    List.assoc_opt "service:infra_www1" (statuses t)
+  in
+  Alcotest.(check (option string))
+    "pending" (Some "pending")
+    (status (rewrite (main_stages ()) grey));
+  let failed_build key (n : Svg_graph.node) =
+    match key with
+    | "build:linux-x86_64" ->
+        { n with state = State.Failed; tooltip = Some "build failed" }
+    | k -> grey k n
+  in
   Alcotest.(check (option string))
     "blocked" (Some "blocked")
-    (List.assoc_opt "service:infra_www1" (statuses t))
+    (status (rewrite (main_stages ()) failed_build))
 
 let test_sha_matches () =
   Alcotest.(check bool)

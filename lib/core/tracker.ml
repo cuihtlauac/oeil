@@ -294,6 +294,20 @@ let step t ~(stages : Chain.stage list) ~facts ~includes =
       (fun (s : Chain.stage) -> List.find_opt (fun (v : stage) -> v.key = s.key) views)
       stages
   in
+  (* A grey node is drawn the same whether an input failed or is still
+     running: it is blocked only behind a failure. *)
+  let views =
+    let failed_before = ref false in
+    List.map
+      (fun (v : stage) ->
+        let v =
+          if v.status = Blocked && not !failed_before then { v with status = Pending }
+          else v
+        in
+        (match v.status with Failed _ -> failed_before := true | _ -> ());
+        v)
+      views
+  in
   List.iter
     (fun (v : stage) ->
       let before = keep_previous v.key in

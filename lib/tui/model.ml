@@ -18,6 +18,7 @@ type t = {
   title : string;
   phase : phase;
   tracker : Tracker.t option;
+  static : Tracker.stage list option;  (** a past deploy's stages, shown as they were *)
   selected : int;
   mode : mode;
   started : float;
@@ -31,6 +32,7 @@ let v ~title ~now =
     title;
     phase = Resolving;
     tracker = None;
+    static = None;
     selected = 0;
     mode = Summary;
     started = now;
@@ -39,7 +41,12 @@ let v ~title ~now =
     quit = false;
   }
 
-let stages t = match t.tracker with Some tr -> Tracker.stages tr | None -> []
+let stages t =
+  match (t.static, t.tracker) with
+  | Some l, _ -> l
+  | None, Some tr -> Tracker.stages tr
+  | None, None -> []
+
 let selected_stage t = List.nth_opt (stages t) t.selected
 let stage t key = List.find_opt (fun (s : Tracker.stage) -> s.key = key) (stages t)
 

@@ -63,6 +63,53 @@ prints scrolling rows instead: a running job's latest log lines show under
 its row and fold away when it succeeds, and `--progress json` prints JSON
 events.
 
+## Following a repository
+
+`oeil repo owner/repo` summarises what is heading to production, per
+deployed branch:
+
+```
+$ oeil repo ocaml/ocaml.org --once
+ocaml/ocaml.org   refreshed now
+main   live 058758ce6 since 11:27:14   ● deploying 1ee8711f6: build running
+╭───┬───┬───────┬─────────────────────────────────────┬───────────────┬────────────────╮
+│   │   │ PR    │ title                               │ state         │           when │
+├───┼───┼───────┼─────────────────────────────────────┼───────────────┼────────────────┤
+│   │ ● │ #4020 │ attribution: 1 page (first_class_m… │ build running │ merged 17m ago │
+│   │ ✔ │ #4005 │ Drop odoc from dev environments, d… │ live          │       11:27:14 │
+│   │ ✔ │ #4019 │ data-packer: give each executable … │ live          │       10:45:13 │
+│   │ ✔ │ #3822 │ deps: upgrade to OCaml 5.5.2        │ live          │       10:45:13 │
+╰───┴───┴───────┴─────────────────────────────────────┴───────────────┴────────────────╯
+staging   no successful deploy found recently   ✗ latest build e5b458339 failed at pull:infra_www
+```
+
+(2026-11-16, abridged.) An *active* PR is a merged PR whose commit is not
+live yet, whatever its age or merge date, or one that went live in the last
+`--recent` hours (default 24). Its state comes from where its merge commit
+sits on the branch's first-parent history:
+
+```
+… live commit │ in the build being deployed │ merged since │ head
+  live          deploying / failed            waiting
+```
+
+- The live commit comes from the deploy history, which is read back from
+  the job histories: each successful docker-service update deployed an
+  image, the push-manifest job that published it names the built image, and
+  the build that produced that names the commit. The deployer rebuilds and
+  redeploys daily, so deploys are not merges. When the branch's latest build
+  produced the image already deployed, its commit counts as live too.
+- GitHub gives the branch head, the commits since the live commit, and the
+  merged PRs; a rebase merge's commits are grouped under their PR.
+- On a terminal, `⏎` on a PR opens its stages and their logs: the current
+  deploy for a PR not live yet, or the deploy that made it live.
+
+The first run reads several days of job logs (about 20–50 s for ocaml.org).
+Finished jobs never change, so what was read is cached in
+`~/.cache/oeil`, and later runs take a few seconds. Without a GitHub token,
+`oeil repo` refreshes every 5 minutes instead of every 20 s, to stay within
+GitHub's unauthenticated rate limit.
+
 ## Install
 
 Needs OCaml ≥ 5.4.
@@ -80,6 +127,7 @@ dune install   # or: dune exec -- oeil …
 | `oeil watch owner/repo#PR` | Waits for the PR to be merged, then follows its merge commit to the deploy target of the PR's base branch. |
 | `oeil watch owner/repo@SHA [--branch B]` | Follows a commit (default branch `main`). |
 | `oeil watch owner/repo:branch` | Follows the branch's latest build. |
+| `oeil repo owner/repo [--recent H] [--once]` | Active PRs of each deployed branch and their deploy state; interactive on a terminal. |
 | `oeil status [--repo owner/repo] [--all]` | Lists failed and active nodes with their errors. `--repo` also shows that repository's deployment chains. |
 | `oeil log JOB [-f]` | Prints a job's log, or follows it while it runs. |
 | `oeil mcp` | MCP server on stdin/stdout. |
@@ -108,6 +156,9 @@ Tools:
 - `wait_for_deploy {target, until?: "done"|"change", timeout_s?}`: blocks until
   the deploy finishes, or until the next stage change. It sends progress
   notifications when the client passes a progress token.
+- `repo_status {repo, recent_hours?}`: the deploy state of a repository's
+  merged PRs, per deployed branch, with the live commit and the build in
+  flight.
 - `pipeline_status {repo?}`: failed and active nodes, with error messages.
 - `job_log {job, tail?}`.
 
