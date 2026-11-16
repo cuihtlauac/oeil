@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>OCurrent Deployer</title><link rel="stylesheet" href="/css/normalize.css"/><link rel="stylesheet" href="/css/ansi.css"/><link rel="stylesheet" href="/css/style.css"/><link rel="icon" href="/img/dashboard-logo.png"/><meta charset="UTF-8"/></head><body><nav><a href="/"><img src="/img/dashboard-logo.png" alt="" height="29" width="29"/></a><div class="site-name">OCurrent Deployer</div><ul><li><a href="/" class="nav-menu-option">Home</a></li><li><a href="/query" class="nav-menu-option">Query</a></li><li><a href="/log-rules" class="nav-menu-option">Log analysis</a></li><li><a href="/jobs" class="nav-menu-option">Jobs</a></li></ul><ul class="right"><li><a href="https://github.com/login/oauth/authorize?scope=user:email&amp;client_id=Iv1.92e6e50edf26339b&amp;state=REDACTED" class="nav-menu-option">Log in</a></li></ul></nav><div id="main"><script src="/js/line-numbers.js"></script><div class="build-history">Build: <ol><li><b>0</b></li></ol></div><pre>2026-11-16 08:23.29: New job: Build Dockerfile using linux-x86_64 in
+                                [https://github.com/ocaml/ocaml.org.git#refs/heads/main (ea9bd215503464270bcc090cab3422bd337f92cd)]
+2026-11-16 08:23.29: Will push staging image to ocurrentbuilder/staging:live-ocurrent-v3.ocaml.org-server-linux-x86_64
+2026-11-16 08:23.29: Using cache hint &quot;https://github.com/ocaml/ocaml.org.git-Dockerfile&quot;
+2026-11-16 08:23.29: Waiting for resource in pool OCluster
+2026-11-16 08:23.29: Waiting for worker…
+2026-11-16 08:23.29: Got resource from pool OCluster
+Building on toxis.caelum.ci.dev
+All commits already cached
+HEAD is now at ea9bd2155 Ignore nine more mechanical passes in git blame
+#0 building with &quot;default&quot; instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.51kB done
+#1 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/ocaml/opam:alpine-3.24-ocaml-5.2
+#2 DONE 0.2s
+
+#3 [internal] load metadata for docker.io/library/alpine:3.24
+#3 DONE 0.2s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 144B done
+#4 DONE 0.2s
+
+#5 [stage-1  1/10] FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+#5 resolve docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf done
+#5 DONE 0.0s
+
+#6 [build  1/12] FROM docker.io/ocaml/opam:alpine-3.24-ocaml-5.2@sha256:5ed77fd6308e6d75cc7d3da0dec333d468204a0ea3bdf4f2d0381ae26db1ccc5
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 83.54MB 1.5s done
+#7 DONE 1.8s
+
+#8 [build  9/12] COPY --chown=opam . .
+#8 CACHED
+
+#9 [stage-1  3/10] RUN adduser -D -u 1000 -h /home/ocamlorg -s /sbin/nologin ocamlorg     &amp;&amp; install -d -o ocamlorg -g ocamlorg /var/lib/ocamlorg
+#9 CACHED
+
+#10 [stage-1  5/10] COPY --from=build --chown=ocamlorg:ocamlorg /home/opam/opam-repository /var/opam-repository
+#10 CACHED
+
+#11 [stage-1  7/10] COPY --from=build --chown=root:root /home/opam/_build/default/src/ocamlorg_package/builder/main.exe /bin/ocamlorg-package-builder
+#11 CACHED
+
+#12 [stage-1  8/10] COPY playground/asset playground/asset
+#12 CACHED
+
+#13 [build 12/12] RUN OCAMLORG_REPO_PATH=opam-repository     ./_build/default/src/ocamlorg_package/builder/main.exe package.state
+#13 CACHED
+
+#14 [build 11/12] RUN cd ~/opam-repository &amp;&amp; git checkout master &amp;&amp; git pull origin master &amp;&amp; opam update
+#14 CACHED
+
+#15 [stage-1  9/10] RUN git clone https://github.com/ocaml-web/html-compiler-manuals /manual
+#15 CACHED
+
+#16 [build  5/12] RUN cd ~/opam-repository &amp;&amp; git reset --hard ca403de684b07caee6f246b36a2f3a1787d780ac &amp;&amp; opam update
+#16 CACHED
+
+#17 [build  8/12] RUN OPAMSOLVERTIMEOUT=300 opam install . --deps-only
+#17 CACHED
+
+#18 [stage-1  6/10] COPY --from=build --chown=root:root /home/opam/_build/default/src/ocamlorg_web/bin/main.exe /bin/server
+#18 CACHED
+
+#19 [build 10/12] RUN opam exec -- dune build @install --profile=release
+#19 CACHED
+
+#20 [build  7/12] COPY --chown=opam ocamlorg.opam .
+#20 CACHED
+
+#21 [stage-1  4/10] COPY --from=build --chown=ocamlorg:ocamlorg /home/opam/package.state /var/lib/ocamlorg/package.state
+#21 CACHED
+
+#22 [build  4/12] RUN opam option --global 'archive-mirrors+=&quot;https://opam.ocaml.org/cache&quot;'
+#22 CACHED
+
+#23 [build  2/12] RUN sudo apk -U upgrade --no-cache &amp;&amp; sudo apk add --no-cache     autoconf     curl-dev     gmp-dev     libev-dev     oniguruma-dev     openssl-dev
+#23 CACHED
+
+#24 [build  6/12] WORKDIR /home/opam
+#24 CACHED
+
+#25 [stage-1  2/10] RUN apk -U upgrade --no-cache &amp;&amp; apk add --no-cache     git     gmp     libev
+#25 CACHED
+
+#26 [build  3/12] RUN sudo mv /usr/bin/opam-2.2 /usr/bin/opam &amp;&amp; opam update
+#26 CACHED
+
+#27 [stage-1 10/10] ADD data/v2 /v2
+#27 CACHED
+
+#28 exporting to image
+#28 exporting layers done
+#28 writing image sha256:bd0bb6111da85462575ef59a3220959494629cb7959e45710a03e14178fe44fb done
+#28 DONE 0.0s
+Pushing &quot;sha256:bd0bb6111da85462575ef59a3220959494629cb7959e45710a03e14178fe44fb&quot; to &quot;ocurrentbuilder/staging:live-ocurrent-v3.ocaml.org-server-linux-x86_64&quot; as user &quot;ocurrentbuilder&quot;
+Login Succeeded
+The push refers to repository [docker.io/ocurrentbuilder/staging]
+93d2dbfcfbf1: Preparing
+07c3331e1ba3: Preparing
+5e0ea81ee55f: Preparing
+b88f51456a6f: Preparing
+906972a8a82b: Preparing
+499d8382eb16: Preparing
+990b9ea18b19: Preparing
+8f6caed68567: Preparing
+92e3fdf849de: Preparing
+75f1d9657d88: Preparing
+499d8382eb16: Waiting
+990b9ea18b19: Waiting
+8f6caed68567: Waiting
+92e3fdf849de: Waiting
+75f1d9657d88: Waiting
+906972a8a82b: Layer already exists
+b88f51456a6f: Layer already exists
+07c3331e1ba3: Layer already exists
+93d2dbfcfbf1: Layer already exists
+5e0ea81ee55f: Layer already exists
+990b9ea18b19: Layer already exists
+8f6caed68567: Layer already exists
+75f1d9657d88: Layer already exists
+499d8382eb16: Layer already exists
+92e3fdf849de: Layer already exists
+live-ocurrent-v3.ocaml.org-server-linux-x86_64: digest: sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7 size: 2429
+The push refers to repository [docker.io/ocurrentbuilder/staging]
+93d2dbfcfbf1: Preparing
+07c3331e1ba3: Preparing
+5e0ea81ee55f: Preparing
+b88f51456a6f: Preparing
+906972a8a82b: Preparing
+499d8382eb16: Preparing
+990b9ea18b19: Preparing
+8f6caed68567: Preparing
+92e3fdf849de: Preparing
+75f1d9657d88: Preparing
+499d8382eb16: Waiting
+92e3fdf849de: Waiting
+75f1d9657d88: Waiting
+8f6caed68567: Waiting
+990b9ea18b19: Waiting
+906972a8a82b: Layer already exists
+07c3331e1ba3: Layer already exists
+5e0ea81ee55f: Layer already exists
+b88f51456a6f: Layer already exists
+93d2dbfcfbf1: Layer already exists
+499d8382eb16: Layer already exists
+990b9ea18b19: Layer already exists
+92e3fdf849de: Layer already exists
+8f6caed68567: Layer already exists
+75f1d9657d88: Layer already exists
+live-ocurrent-v3.ocaml.org-server-linux-x86_64: digest: sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7 size: 2429
+Job succeeded
+2026-11-16 08:24.07: Job succeeded
+</pre></div></body></html>

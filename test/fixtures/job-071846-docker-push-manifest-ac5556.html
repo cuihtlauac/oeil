@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>OCurrent Deployer</title><link rel="stylesheet" href="/css/normalize.css"/><link rel="stylesheet" href="/css/ansi.css"/><link rel="stylesheet" href="/css/style.css"/><link rel="icon" href="/img/dashboard-logo.png"/><meta charset="UTF-8"/></head><body><nav><a href="/"><img src="/img/dashboard-logo.png" alt="" height="29" width="29"/></a><div class="site-name">OCurrent Deployer</div><ul><li><a href="/" class="nav-menu-option">Home</a></li><li><a href="/query" class="nav-menu-option">Query</a></li><li><a href="/log-rules" class="nav-menu-option">Log analysis</a></li><li><a href="/jobs" class="nav-menu-option">Jobs</a></li></ul><ul class="right"><li><a href="https://github.com/login/oauth/authorize?scope=user:email&amp;client_id=Iv1.92e6e50edf26339b&amp;state=REDACTED" class="nav-menu-option">Log in</a></li></ul></nav><div id="main"><script src="/js/line-numbers.js"></script><div class="build-history">Build: <ol><li><b>1971</b></li><li><a href="/job/2026-11-16/065646-docker-push-manifest-5a7e14">1970</a></li><li><a href="/job/2026-11-15/065725-docker-push-manifest-dec2fd">1969</a></li><li><a href="/job/2026-11-14/063003-docker-push-manifest-f77c92">1968</a></li><li><a href="/job/2026-11-13/065859-docker-push-manifest-11f079">1967</a></li><li><a href="/job/2026-11-12/122447-docker-push-manifest-9d12aa">1966</a></li><li><a href="/job/2026-11-12/091543-docker-push-manifest-6b7d10">1965</a></li><li><a href="/job/2026-11-11/063402-docker-push-manifest-87f0db">1964</a></li><li><a href="/job/2026-11-11/041959-docker-push-manifest-afa6d7">1963</a></li><li><a href="/job/2026-11-10/125844-docker-push-manifest-8ac867">1962</a></li></ol></div><pre>2026-11-16 07:18.46: New job: push ocurrent/v3.ocaml.org-server:live = {&quot;manifests&quot;:[&quot;ocurrentbuilder/staging@sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7&quot;]}
+2026-11-16 07:18.46: Exec: &quot;docker&quot; &quot;--config&quot; &quot;/tmp/push-manifest7d614ef&quot; 
+                           &quot;login&quot; &quot;--password-stdin&quot; &quot;--username&quot; &quot;ocurrent&quot;
+
+WARNING! Your credentials are stored unencrypted in '/tmp/push-manifest7d614ef/config.json'.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/go/credential-store/
+
+Login Succeeded
+2026-11-16 07:18.47: Exec: &quot;docker&quot; &quot;--config&quot; &quot;/tmp/push-manifest7d614ef&quot; 
+                           &quot;buildx&quot; &quot;imagetools&quot; &quot;create&quot; &quot;-t&quot; &quot;ocurrent/v3.ocaml.org-server:live&quot; 
+                           &quot;ocurrentbuilder/staging@sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7&quot;
+#1 [internal] pushing docker.io/ocurrent/v3.ocaml.org-server
+#1 0.000 copying sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7 from docker.io/ocurrentbuilder/staging@sha256:67a237869305052eb4f29819fcd3fafe6adb8276392e949603e84862d01537e7 to docker.io/ocurrent/v3.ocaml.org-server
+#1 18.78 pushing sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638 to docker.io/ocurrent/v3.ocaml.org-server:live
+#1 DONE 20.3s
+2026-11-16 07:19.09: Exec: &quot;docker&quot; &quot;--config&quot; &quot;/tmp/push-manifest7d614ef&quot; 
+                           &quot;buildx&quot; &quot;imagetools&quot; &quot;inspect&quot; &quot;--format&quot; 
+                           &quot;{{printf &quot;%s&quot; .Manifest.Digest}}&quot; &quot;ocurrent/v3.ocaml.org-server:live&quot;
+2026-11-16 07:19.10: --&gt; &quot;ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot;
+2026-11-16 07:19.10: Job succeeded
+</pre></div></body></html>

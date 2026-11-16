@@ -1,0 +1,5 @@
+(test
+ (name test_oeil)
+ (libraries oeil alcotest)
+ (deps
+  (glob_files fixtures/*)))

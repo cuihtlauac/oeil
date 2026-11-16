@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>OCurrent Deployer</title><link rel="stylesheet" href="/css/normalize.css"/><link rel="stylesheet" href="/css/ansi.css"/><link rel="stylesheet" href="/css/style.css"/><link rel="icon" href="/img/dashboard-logo.png"/><meta charset="UTF-8"/></head><body><nav><a href="/"><img src="/img/dashboard-logo.png" alt="" height="29" width="29"/></a><div class="site-name">OCurrent Deployer</div><ul><li><a href="/" class="nav-menu-option">Home</a></li><li><a href="/query" class="nav-menu-option">Query</a></li><li><a href="/log-rules" class="nav-menu-option">Log analysis</a></li><li><a href="/jobs" class="nav-menu-option">Jobs</a></li></ul><ul class="right"><li><a href="https://github.com/login/oauth/authorize?scope=user:email&amp;client_id=Iv1.92e6e50edf26339b&amp;state=REDACTED" class="nav-menu-option">Log in</a></li></ul></nav><div id="main"><script src="/js/line-numbers.js"></script><div class="build-history">Build: <ol><li><b>0</b></li></ol></div><pre>2026-11-16 07:19.10: New job: &quot;docker&quot; &quot;--context&quot; &quot;v3b.ocaml.org&quot; &quot;pull&quot;
+                     &quot;ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot;
+2026-11-16 07:19.10: Exec: &quot;docker&quot; &quot;--context&quot; &quot;v3b.ocaml.org&quot; &quot;login&quot; 
+                           &quot;--password-stdin&quot; &quot;--username&quot; &quot;ocurrent&quot;
+Login Succeeded
+2026-11-16 07:19.12: Exec: &quot;docker&quot; &quot;--context&quot; &quot;v3b.ocaml.org&quot; &quot;pull&quot; 
+                           &quot;ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot;
+docker.io/ocurrent/v3.ocaml.org-server@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638: Pulling from ocurrent/v3.ocaml.org-server
+881fc932939e: Already exists
+539927d12539: Already exists
+91a0529980ad: Already exists
+9c71607612b8: Pulling fs layer
+9b8f642a2a4e: Pulling fs layer
+72fa6a7ea13e: Pulling fs layer
+862b7a3a4eb4: Pulling fs layer
+5921a0e47a09: Pulling fs layer
+73094dfb6796: Pulling fs layer
+ecda7be786a6: Pulling fs layer
+862b7a3a4eb4: Waiting
+5921a0e47a09: Waiting
+73094dfb6796: Waiting
+ecda7be786a6: Waiting
+9c71607612b8: Verifying Checksum
+9c71607612b8: Download complete
+72fa6a7ea13e: Download complete
+862b7a3a4eb4: Verifying Checksum
+862b7a3a4eb4: Download complete
+9c71607612b8: Pull complete
+5921a0e47a09: Verifying Checksum
+5921a0e47a09: Download complete
+ecda7be786a6: Verifying Checksum
+ecda7be786a6: Download complete
+9b8f642a2a4e: Verifying Checksum
+9b8f642a2a4e: Download complete
+73094dfb6796: Verifying Checksum
+73094dfb6796: Download complete
+9b8f642a2a4e: Pull complete
+72fa6a7ea13e: Pull complete
+862b7a3a4eb4: Pull complete
+5921a0e47a09: Pull complete
+73094dfb6796: Pull complete
+ecda7be786a6: Pull complete
+Digest: sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638
+Status: Downloaded newer image for ocurrent/v3.ocaml.org-server@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638
+docker.io/ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638
+2026-11-16 07:19.53: Exec: &quot;docker&quot; &quot;--context&quot; &quot;v3b.ocaml.org&quot; &quot;image&quot; 
+                           &quot;inspect&quot; &quot;ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot; 
+                           &quot;-f&quot; &quot;{{index .RepoDigests 0}}&quot;
+2026-11-16 07:19.54: Pulled &quot;ocurrent/v3.ocaml.org-server:live@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot; -&gt; &quot;ocurrent/v3.ocaml.org-server@sha256:cdab3e4018ce65a0ae67d7a9c9e969fe184f5c4612122f5db45dfbdd976af638&quot;
+2026-11-16 07:19.54: Job succeeded
+</pre></div></body></html>

@@ -1,0 +1,4 @@
+(library
+ (name oeil)
+ (public_name oeil)
+ (libraries xmlm uri))
