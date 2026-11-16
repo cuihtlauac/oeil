@@ -15,7 +15,8 @@ let duration secs =
   let s = int_of_float (Float.max 0. secs) in
   if s < 60 then Printf.sprintf "%ds" s
   else if s < 3600 then Printf.sprintf "%dm%02ds" (s / 60) (s mod 60)
-  else Printf.sprintf "%dh%02dm" (s / 3600) (s mod 3600 / 60)
+  else if s < 2 * 86400 then Printf.sprintf "%dh%02dm" (s / 3600) (s mod 3600 / 60)
+  else Printf.sprintf "%dd%02dh" (s / 86400) (s mod 86400 / 3600)
 
 (* Local time, with the date when it is not today. *)
 let clock_time ~now t =

@@ -248,25 +248,159 @@ let feeds_table ~now ~live ~selected (s : RM.t) =
              @ [ last; outcome; pr_fate s f; next f; strip_view ~now ~days f ])
            s.feeds))
 
+(* {1 Upstreams} *)
+
+module U = Oeil_net.Upstreams
+
+let short_date ~now t = Render.clock_time ~now t
+
+(* "deploy live 1d68941 since 09-03 13:51", or the build in flight or failed. *)
+let deploy_text ~now (d : U.deploy) =
+  match (d.d_state, d.d_error) with
+  | None, Some e -> (`Bad, "deploy: " ^ e)
+  | None, None -> (`Ok, "")
+  | Some st, _ -> (
+      let live =
+        match (st.live, st.live_since) with
+        | Some c, Some at ->
+            let when_ =
+              match deploy_time at with
+              | Some t -> " since " ^ short_date ~now t
+              | None -> ""
+            in
+            "deploy live " ^ short c ^ when_
+        | Some c, None -> "deploy live " ^ short c
+        | None, _ -> "no deploy found recently"
+      in
+      match (Tracker.verdict st.tracker, Tracker.commit st.tracker) with
+      | Tracker.Failed_at k, Some c ->
+          (`Bad, live ^ " · build " ^ short c ^ " failed at " ^ k)
+      | Tracker.In_progress, Some c
+        when Option.fold ~none:true ~some:(fun l -> not (Tracker.sha_matches l c)) st.live
+        ->
+          (`Busy, live ^ " · deploying " ^ short c ^ ": " ^ RM.furthest st.tracker)
+      | _ -> (`Ok, live))
+
+let upstream_line ~now (u : U.t) (k : Repo_model.upstream) =
+  match k with
+  | Docs ->
+      let dl, dtext = deploy_text ~now u.docs.deploy in
+      let pl, ptext =
+        match (u.docs.pipeline, u.docs.pipeline_error) with
+        | Some g, _ ->
+            let count p =
+              List.length (List.filter (fun n -> p (Svg_graph.effective_state n)) g.nodes)
+            in
+            let failed = count (( = ) State.Failed) and active = count State.is_active in
+            let when_ =
+              match u.docs.pipeline_at with
+              | Some t -> ", checked " ^ ago ~now t
+              | None -> ""
+            in
+            ( (if failed > 0 then `Bad else if active > 0 then `Busy else `Ok),
+              Printf.sprintf "pipeline: %d active, %d failed%s" active failed when_ )
+        | None, Some e -> (`Bad, "pipeline: " ^ e)
+        | None, None -> (`Ok, "")
+      in
+      let level =
+        if dl = `Bad || pl = `Bad then `Bad
+        else if dl = `Busy || pl = `Busy then `Busy
+        else `Ok
+      in
+      (level, "docs CI", dtext ^ " · " ^ ptext)
+  | Health -> (
+      let h = u.health in
+      let dl, dtext = deploy_text ~now h.health_deploy in
+      let run_text (r : U.health_run) =
+        Printf.sprintf "run of %s (opam-repository %s)"
+          (match r.run_time with Some t -> short_date ~now t | None -> r.run_id)
+          (short r.opam_commit)
+      in
+      match (h.latest, h.health_error) with
+      | Some r, _ ->
+          let synced = h.on_ocamlorg = Some r.run_id in
+          ( (if dl = `Bad then `Bad else if not synced then `Busy else `Ok),
+            "opam health",
+            "check.ci " ^ run_text r
+            ^ (if synced then " · on ocaml.org" else " · ocaml.org has an older run")
+            ^ if dl = `Ok then "" else " · " ^ dtext )
+      | None, Some e -> (`Bad, "opam health", "check.ci: " ^ e)
+      | None, None -> (`Ok, "opam health", dtext))
+  | Manuals -> (
+      let m = u.manuals in
+      match (m.commit, m.manuals_error) with
+      | Some c, _ ->
+          let date =
+            match Ci.time_of_iso c.date with
+            | Some t -> short_date ~now t
+            | None -> c.date
+          in
+          let level, state =
+            match m.included with
+            | Some true -> (`Ok, "in the live ocaml.org build")
+            | Some false -> (`Busy, "waiting for the next ocaml.org build")
+            | None -> (`Ok, "")
+          in
+          ( level,
+            "manuals",
+            Printf.sprintf "%s %s (%s) · %s" (short c.sha) c.message date state )
+      | None, Some e -> (`Bad, "manuals", e)
+      | None, None -> (`Ok, "manuals", ""))
+
+let upstreams_table ~now ~live ~selected (u : U.t) =
+  Table.view
+    [
+      Table.column ~shrinkable:false (text "");
+      Table.column ~shrinkable:false (text "");
+      Table.column ~shrinkable:false (text "upstream");
+      Table.column ~overflow:`Wrap (text "state");
+    ]
+    (List.mapi
+       (fun i k ->
+         let level, name, detail = upstream_line ~now u k in
+         let sel = i = selected in
+         [
+           (if sel then text "›" else text " ");
+           (match level with
+           | `Bad -> View.role `Failed (text "✗")
+           | `Busy -> View.role `Warning (if live then Spinner.view () else text "●")
+           | `Ok -> View.role `Succeeded (text "✔"));
+           (if sel then View.styled Style.reverse (text name) else text name);
+           (match level with
+           | `Bad -> View.role `Failed (text detail)
+           | _ -> muted detail);
+         ])
+       [ Repo_model.Docs; Health; Manuals ])
+
 let body ~now ~live (m : Repo_model.t) =
   match m.snapshot with
   | None -> [ muted "  reading the pipeline, the deploy history and GitHub…" ]
   | Some s ->
+      let ups, n_ups =
+        match m.upstreams with
+        | None -> ([ muted "  reading the upstreams (docs CI, opam health, manuals)…" ], 0)
+        | Some u ->
+            ( [
+                View.role `Header (text "upstreams");
+                upstreams_table ~now ~live ~selected:m.selected u;
+              ],
+              3 )
+      in
       let feeds =
         match s.feeds with
         | [] -> []
         | _ ->
             [
               View.role `Header (text "feeds");
-              feeds_table ~now ~live ~selected:m.selected s;
+              feeds_table ~now ~live ~selected:(m.selected - n_ups) s;
               muted "  ● opened or updated a PR  ○ no change  ✗ failed  ✔ ran  · no run";
             ]
       in
       let errors =
         List.map (fun e -> View.role `Warning (text ("  ⚠ " ^ e))) s.feed_errors
       in
-      let offset = ref (List.length s.feeds) in
-      feeds @ errors
+      let offset = ref (n_ups + List.length s.feeds) in
+      ups @ feeds @ errors
       @ List.concat_map
           (fun (b : RM.branch) ->
             let t =

@@ -1,8 +1,18 @@
 # oeil
 
-Follow a merged pull request until it is deployed, from a terminal or an
-MCP client, by reading the web UI of an [OCurrent](https://github.com/ocurrent/ocurrent)
-service such as [deploy.ci.ocaml.org](https://deploy.ci.ocaml.org).
+Watch [ocaml.org](https://ocaml.org)'s way to production from a terminal or
+an MCP client: its merged pull requests until they are deployed, the
+GitHub workflows that feed it (scrapers, bots, CI), and what it is built
+from (the docs CI, opam-health-check, the compiler manuals).
+
+```
+$ oeil              # the dashboard
+$ oeil watch #4020  # follow one PR (or @SHA, or :staging)
+```
+
+oeil reads the web UI of [OCurrent](https://github.com/ocurrent/ocurrent)
+services such as [deploy.ci.ocaml.org](https://deploy.ci.ocaml.org), and
+GitHub's API.
 
 OCurrent web UIs show their pipeline only as an SVG diagram for a browser.
 oeil reads that diagram back into a graph, finds a branch's deployment chain
@@ -63,13 +73,13 @@ prints scrolling rows instead: a running job's latest log lines show under
 its row and fold away when it succeeds, and `--progress json` prints JSON
 events.
 
-## Following a repository
+## The dashboard
 
-`oeil repo owner/repo` summarises what is heading to production, per
-deployed branch:
+`oeil` summarises what is heading to ocaml.org's production, per deployed
+branch:
 
 ```
-$ oeil repo ocaml/ocaml.org --once
+$ oeil --once
 ocaml/ocaml.org   refreshed now
 main   live 058758ce6 since 11:27:14   ● deploying 1ee8711f6: build running
 ╭───┬───┬───────┬─────────────────────────────────────┬───────────────┬────────────────╮
@@ -104,9 +114,35 @@ sits on the branch's first-parent history:
 - On a terminal, `⏎` on a PR opens its stages and their logs: the current
   deploy for a PR not live yet, or the deploy that made it live.
 
+### Upstreams
+
+At the top, what ocaml.org is built from:
+
+```
+upstreams
+│ ● │ docs CI     │ deploy live 1d689415e since 09-03 15:51 · pipeline: 2 active, 0 failed │
+│ ✔ │ opam health │ check.ci run of 11-10 10:25 (opam-repository 78c202b54) · on ocaml.org │
+│ ✔ │ manuals     │ 3909759e5 Merge pull request #13 … (06-19 18:21) · in the live build    │
+```
+
+- **docs CI**: [ocaml-docs-ci](https://github.com/ocurrent/ocaml-docs-ci)
+  on dill: its deploy (by deploy.ci.ocaml.org, branch `dill`, Docker
+  Compose), and its pipeline at dill.caelum.ci.dev, read at most every five
+  minutes since it takes a while to draw. `⏎` lists the pipeline's nodes and
+  the deploy's stages, each with its log.
+- **opam health**: check.ci.ocaml.org's latest run, and whether ocaml.org's
+  `data/opam_health.yml` has it. `⏎` opens the timeline of the bot PR that
+  brought the latest one. check.ci.ocaml.org turns away clients that do not
+  look like a browser; oeil sends it the same User-Agent as ocaml.org's own
+  scraper (`tool/data-scrape`), and only to it.
+- **manuals**: the latest commit of
+  [html-compiler-manuals](https://github.com/ocaml-web/html-compiler-manuals),
+  which ocaml.org's Dockerfile clones when its image is built: it is live
+  once a build that started after it is deployed.
+
 ### Feeds: scheduled and bot workflows
 
-Above the PRs, `oeil repo` lists the repository's *feeds*: the GitHub
+Above the PRs, `oeil` lists ocaml.org's *feeds*: the GitHub
 Actions workflows that run on their own, on a schedule, or that open PRs
 from a bot branch, such as ocaml.org's scrapers (planet, platform releases,
 opam-health) or its attribution sync. For each feed it shows its last run,
@@ -159,7 +195,7 @@ log, or a deployer job's, followed live while it runs.
 The first run reads several days of job logs (about 20–50 s for ocaml.org).
 Finished jobs never change, so what was read is cached in
 `~/.cache/oeil`, and later runs take a few seconds. Without a GitHub token,
-`oeil repo` refreshes every 5 minutes instead of every 20 s, to stay within
+`oeil` refreshes every 5 minutes instead of every 20 s, to stay within
 GitHub's unauthenticated rate limit.
 
 ## Install
@@ -176,10 +212,10 @@ dune install   # or: dune exec -- oeil …
 
 | Command | What it does |
 |---|---|
-| `oeil watch owner/repo#PR` | Waits for the PR to be merged, then follows its merge commit to the deploy target of the PR's base branch. |
-| `oeil watch owner/repo@SHA [--branch B]` | Follows a commit (default branch `main`). |
-| `oeil watch owner/repo:branch` | Follows the branch's latest build. |
-| `oeil repo owner/repo [--recent H] [--once]` | Active PRs of each deployed branch and their deploy state; interactive on a terminal. |
+| `oeil [--recent H] [--once]` | The dashboard (also `oeil dashboard`): upstreams, feeds, and the active PRs of each deployed branch; interactive on a terminal. |
+| `oeil watch #PR` | Waits for the PR to be merged, then follows its merge commit to the deploy target of the PR's base branch. |
+| `oeil watch @SHA [--branch B]` | Follows a commit (default branch `main`). |
+| `oeil watch :branch` | Follows the branch's latest build. |
 | `oeil status [--repo owner/repo] [--all]` | Lists failed and active nodes with their errors. `--repo` also shows that repository's deployment chains. |
 | `oeil log JOB [-f]` | Prints a job's log, or follows it while it runs. |
 | `oeil mcp` | MCP server on stdin/stdout. |

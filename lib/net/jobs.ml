@@ -254,3 +254,10 @@ let save t =
         Marshal.to_channel oc d []);
     Sys.rename tmp file
   with _ -> ()
+
+(* "2026-11-16 09:23.52" (a log line's time, UTC) -> seconds since the epoch. *)
+let seconds_of_log_time s =
+  try
+    Scanf.sscanf s "%4d-%2d-%2d %2d:%2d.%2d" (fun y mo d h mi se ->
+        Option.map Ptime.to_float_s (Ptime.of_date_time ((y, mo, d), ((h, mi, se), 0))))
+  with _ -> None

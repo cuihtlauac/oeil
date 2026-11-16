@@ -162,6 +162,8 @@ let timeline ~repo ~number ~title ~state (steps : Lifecycle.step list) =
                       | Some (Lifecycle.Deployer_job j) ->
                           `Assoc [ ("deployer_job", `String j) ]
                       | Some (Actions_job j) -> `Assoc [ ("actions_job", `Int j) ]
+                      | Some (Ocurrent_job { base; job }) ->
+                          `Assoc [ ("ocurrent", `String base); ("job", `String job) ]
                       | None -> `Null );
                   ])
               steps) );

@@ -82,6 +82,27 @@ let test_chain () =
       Alcotest.(check (option string))
         "build job" (Some "2026-11-16/082329-ocluster-build-13f132") build.node.job
 
+let test_chain_compose () =
+  (* A Docker Compose deployment (docs-ci on dill) is the service stage. *)
+  let svg =
+    {|<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g class="graph">
+<g id="node1" class="node"><title>n1</title><polygon fill="#90ee90"/><text>ocurrent/ocaml-docs-ci</text><text>refs/heads/dill</text></g>
+<g id="node2" class="node"><title>n2</title><a xlink:href="/job/2026-09-03/135059-docker-pull-228846"><polygon fill="#90ee90"/><text>pull ✔</text></a></g>
+<g id="node3" class="node"><title>n3</title><a xlink:href="/job/2026-09-03/135122-docker-compose-v2-c7cd82"><polygon fill="#90ee90"/><text>docker-compose-v2</text><text>ocaml-docs-ci ✔</text></a></g>
+<g id="edge1" class="edge"><title>n1&#45;&gt;n2</title></g>
+<g id="edge2" class="edge"><title>n2&#45;&gt;n3</title></g>
+</g></svg>|}
+  in
+  let g = match Svg_graph.parse svg with Ok g -> g | Error e -> Alcotest.fail e in
+  match Chain.stages g ~repo:"ocurrent/ocaml-docs-ci" ~branch:"dill" with
+  | Error e -> Alcotest.fail e
+  | Ok stages ->
+      Alcotest.(check (list string))
+        "keys"
+        [ "pull:ocaml-docs-ci"; "service:ocaml-docs-ci" ]
+        (List.map (fun (s : Chain.stage) -> s.key) stages)
+
 let test_chain_missing () =
   let g = graph "ocaml.org.svg" in
   match Chain.stages g ~repo:"ocaml/ocaml.org" ~branch:"nope" with
@@ -378,6 +399,10 @@ let test_target () =
   ok "ocaml/ocaml.org@EA9BD2155" "ocaml/ocaml.org@ea9bd2155";
   ok "ocaml/ocaml.org:staging" "ocaml/ocaml.org:staging";
   ok "ocaml/ocaml.org" "ocaml/ocaml.org:main";
+  (* ocaml.org is the default repository. *)
+  ok "#4020" "ocaml/ocaml.org#4020";
+  ok "@ea9bd2155" "ocaml/ocaml.org@ea9bd2155";
+  ok ":staging" "ocaml/ocaml.org:staging";
   bad "ocaml.org#12";
   bad "ocaml/ocaml.org#x";
   bad "ocaml/ocaml.org@xyz";
@@ -396,6 +421,7 @@ let () =
         [
           Alcotest.test_case "ocaml.org main" `Quick test_chain;
           Alcotest.test_case "missing branch" `Quick test_chain_missing;
+          Alcotest.test_case "docker compose" `Quick test_chain_compose;
         ] );
       ( "job_log",
         [

@@ -25,8 +25,9 @@ let target_props =
   [
     ( "target",
       prop
-        "What to follow: owner/repo#PR (e.g. ocaml/ocaml.org#1234), owner/repo@SHA, or \
-         owner/repo:branch." );
+        "What to follow: #PR, @SHA or :branch of ocaml/ocaml.org (e.g. #4020), or \
+         owner/repo#PR, owner/repo@SHA, owner/repo:branch for another repository the \
+         deployer handles." );
     ( "branch",
       prop "Branch whose deployment to follow (default: the PR's base branch, or main)."
     );
@@ -89,18 +90,18 @@ let tools =
         );
         ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
       ]
-      [ "repo" ];
+      [];
     tool "pr_timeline"
       "The life of a pull request, step by step with times and durations: the bot \
        workflow run that opened it (for scraper PRs), the PR, its CI checks, the wait \
        for review and merge, the deployer's stages, and when it went live. Also the \
        share of time spent waiting for review."
       [
-        ("repo", prop "owner/repo, e.g. ocaml/ocaml.org.");
+        ("repo", prop "owner/repo (default: ocaml/ocaml.org).");
         ("pr", prop ~typ:"integer" "The pull request number.");
         ("instance", prop "Base URL of the OCurrent web UI (default: the server's).");
       ]
-      [ "repo"; "pr" ];
+      [ "pr" ];
     tool "job_log" "The log of a job (by default its last 200 lines)."
       [
         ("job", prop "Job id, e.g. 2026-11-16/071954-docker-service-f92f02.");
@@ -399,11 +400,12 @@ let job_log ctx args =
       in
       ok_text (String.concat "\n" lines)
 
+(* oeil is about ocaml.org: the repository is optional. *)
 let repo_arg args =
   match arg_string args "repo" with
   | Some r when Target.valid_repo r -> r
   | Some r -> fail "not an owner/repo: %s" r
-  | None -> fail "missing argument: repo"
+  | None -> Target.default_repo
 
 (* The repo monitor of an instance: its caches live for the session. *)
 let repo_ctx ctx inst =

@@ -53,10 +53,17 @@ let classify (g : Svg_graph.t) (n : Svg_graph.node) =
       let service =
         Svg_graph.succs g n.id
         |> List.find_map (fun (s : Svg_graph.node) ->
-            match s.label with "docker-service" :: name :: _ -> Some name | _ -> None)
+            match s.label with
+            | ( "docker-service" | "docker-compose" | "docker-compose-v2"
+              | "docker-compose-cli" )
+              :: name :: _ ->
+                Some name
+            | _ -> None)
       in
       Some (Pull (Option.value service ~default:""))
-  | "docker-service" -> Some (Service (match rest with s :: _ -> s | [] -> ""))
+  (* A Docker Compose deployment is the service stage of its chain. *)
+  | "docker-service" | "docker-compose" | "docker-compose-v2" | "docker-compose-cli" ->
+      Some (Service (match rest with s :: _ -> s | [] -> ""))
   | "post" -> Some Notify
   | _ -> None
 

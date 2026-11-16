@@ -2,7 +2,12 @@
    steps with times and durations. Pure. *)
 
 type status = Done | Running | Failed | Pending | Waiting
-type log = Actions_job of int | Deployer_job of string
+
+type log =
+  | Actions_job of int
+  | Deployer_job of string
+  | Ocurrent_job of { base : string; job : string }
+      (** a job of another OCurrent service *)
 
 type step = {
   key : string;

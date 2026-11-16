@@ -445,48 +445,44 @@ let watch_cmd =
       const watch $ instance_arg $ target $ branch $ interval $ timeout $ progress
       $ no_logs $ rows $ verbose_arg)
 
-(* ---------- repo ---------- *)
+(* ---------- dashboard ---------- *)
 
-let repo_cmd_run instance repo recent every rows verbose =
+let repo = Target.default_repo
+
+let dashboard instance recent every once verbose =
   setup_logs verbose;
-  if not (Target.valid_repo repo) then exit_error ("not an owner/repo: " ^ repo)
-  else
-    with_env @@ fun env web ->
-    let github = Github.make ?token:(Github.token_from_env ()) web in
-    let every =
-      match every with
-      | Some e -> e
-      | None -> if Github.has_token github then 20. else 300.
-    in
-    let recent = recent *. 3600. in
-    if (not rows) && Unix.isatty Unix.stdin && Oeil_tui.Screen.available () then begin
-      Console_tty.setup ();
-      match Oeil_tui.Repo_app.run ~env ~web ~instance ~github ~repo ~recent ~every () with
-      | Ok () -> 0
-      | Error e -> exit_error e
-    end
-    else begin
-      Console_tty.setup ();
-      let inst = Instance.make web instance in
-      let jobs = Jobs.create ~clock:(Eio.Stdenv.clock env) inst in
-      Jobs.load jobs;
-      let ctx = Repo_monitor.create ~jobs ~github in
-      match Repo_monitor.snapshot ctx ~repo ~recent () with
-      | Error e -> exit_error e
-      | Ok s ->
-          let m = Oeil_tui.Repo_model.with_snapshot (Oeil_tui.Repo_model.v ~repo) s in
-          Fmt.pr "%a@." View.pp (Oeil_tui.Repo_render.final m);
-          0
-    end
-
-let repo_cmd =
-  let open Cmdliner in
-  let repo =
-    Arg.(
-      required
-      & pos 0 (some string) None
-      & info [] ~docv:"OWNER/REPO" ~doc:"The repository.")
+  with_env @@ fun env web ->
+  let github = Github.make ?token:(Github.token_from_env ()) web in
+  let every =
+    match every with Some e -> e | None -> if Github.has_token github then 20. else 300.
   in
+  let recent = recent *. 3600. in
+  Console_tty.setup ();
+  if (not once) && Unix.isatty Unix.stdin && Oeil_tui.Screen.available () then
+    match Oeil_tui.Repo_app.run ~env ~web ~instance ~github ~repo ~recent ~every () with
+    | Ok () -> 0
+    | Error e -> exit_error e
+  else
+    let inst = Instance.make web instance in
+    let jobs = Jobs.create ~clock:(Eio.Stdenv.clock env) inst in
+    Jobs.load jobs;
+    let ctx = Repo_monitor.create ~jobs ~github in
+    match Repo_monitor.snapshot ctx ~repo ~recent () with
+    | Error e -> exit_error e
+    | Ok s ->
+        let main =
+          List.find_opt (fun (b : Repo_monitor.branch) -> b.branch = "main") s.branches
+        in
+        let upstreams =
+          Upstreams.fetch (Upstreams.create ~monitor:ctx ~web) ~gh:github ~ocamlorg:main
+        in
+        let m = Oeil_tui.Repo_model.with_snapshot (Oeil_tui.Repo_model.v ~repo) s in
+        Fmt.pr "%a@." View.pp
+          (Oeil_tui.Repo_render.final { m with upstreams = Some upstreams });
+        0
+
+let dashboard_term =
+  let open Cmdliner in
   let recent =
     Arg.(
       value & opt float 24.
@@ -500,19 +496,22 @@ let repo_cmd =
       & info [ "every" ] ~docv:"SECONDS"
           ~doc:"Refresh period (default 20 s, 300 s without a GitHub token).")
   in
-  let rows =
+  let once =
     Arg.(
       value & flag
-      & info [ "rows"; "once" ]
-          ~doc:"Print the summary once instead of the interactive view.")
+      & info [ "once"; "rows" ]
+          ~doc:"Print the dashboard once instead of the interactive view.")
   in
-  Cmd.v
-    (Cmd.info "repo"
-       ~doc:
-         "Summarise a repository's deployments: every merged PR not live yet (waiting, \
-          deploying or failed), whatever its age, and those that went live recently. On \
-          a terminal, Enter opens a PR's stages and their logs.")
-    Term.(const repo_cmd_run $ instance_arg $ repo $ recent $ every $ rows $ verbose_arg)
+  Term.(const dashboard $ instance_arg $ recent $ every $ once $ verbose_arg)
+
+let dashboard_doc =
+  "ocaml.org's dashboard: its upstreams (docs CI, opam health, compiler manuals), its \
+   feeds (scrapers and other scheduled or bot workflows), and every merged PR not live \
+   yet (waiting, deploying or failed), whatever its age, or live since recently. On a \
+   terminal, Enter opens a row's timeline, and a step's log."
+
+let dashboard_cmd =
+  Cmdliner.Cmd.v (Cmdliner.Cmd.info "dashboard" ~doc:dashboard_doc) dashboard_term
 
 (* ---------- mcp ---------- *)
 
@@ -531,10 +530,11 @@ let mcp_cmd =
 let () =
   let open Cmdliner in
   let doc =
-    "Watch OCurrent pipelines and deployments from a terminal or an MCP client."
+    "Watch ocaml.org's way to production — its PRs, deploys, upstreams and CI — from a \
+     terminal or an MCP client. Without a command, opens the dashboard."
   in
   exit
     (Cmd.eval'
-       (Cmd.group
+       (Cmd.group ~default:dashboard_term
           (Cmd.info "oeil" ~version:"0.1.0" ~doc)
-          [ watch_cmd; repo_cmd; status_cmd; log_cmd; mcp_cmd ]))
+          [ dashboard_cmd; watch_cmd; status_cmd; log_cmd; mcp_cmd ]))

@@ -103,6 +103,33 @@ let furthest (t : Tracker.t) =
   | Some s -> Chain.kind_name s.kind ^ " " ^ Tracker.status_to_string s.status
   | None -> "finishing"
 
+type deploy_state = {
+  tracker : Tracker.t;  (** the branch's latest build *)
+  deploys : Repo_state.deploy list;  (** recent deploys, newest first *)
+  newest : Repo_state.deploy option;  (** the newest deploy whose commit is known *)
+  live : string option;
+  live_since : string option;
+}
+
+(* What a deployed branch runs: its latest build, its recent deploys, and
+   its live commit. *)
+let deploy_state ctx ~repo ~branch ~since stages =
+  let tracker = latest_build ctx ~repo ~branch stages in
+  let deploys = Deploys.history ctx.jobs ~repo ~branch ~stages ~since in
+  let newest =
+    List.find_opt (fun (d : Repo_state.deploy) -> Option.is_some d.commit) deploys
+  in
+  (* The newest deploy's commit, or the latest build's when its image is the
+     one already deployed. *)
+  let live, live_since =
+    match (Tracker.verdict tracker, Tracker.commit tracker, newest) with
+    | Tracker.Deployed, Some b, Some d -> (Some b, Some d.at)
+    | Tracker.Deployed, Some b, None -> (Some b, None)
+    | _, _, Some d -> (d.commit, Some d.at)
+    | _, _, None -> (None, None)
+  in
+  { tracker; deploys; newest; live; live_since }
+
 let branch_summary ctx ~repo ~graph ~since branch =
   let errors = ref [] in
   let ok = function
@@ -125,19 +152,8 @@ let branch_summary ctx ~repo ~graph ~since branch =
         errors = [ e ];
       }
   | Ok stages ->
-      let tracker = latest_build ctx ~repo ~branch stages in
-      let deploys = Deploys.history ctx.jobs ~repo ~branch ~stages ~since in
-      let newest =
-        List.find_opt (fun (d : Repo_state.deploy) -> Option.is_some d.commit) deploys
-      in
-      (* What is live: the newest deploy's commit, or the latest build's when
-         its image is the one already deployed. *)
-      let live, live_since =
-        match (Tracker.verdict tracker, Tracker.commit tracker, newest) with
-        | Tracker.Deployed, Some b, Some d -> (Some b, Some d.at)
-        | Tracker.Deployed, Some b, None -> (Some b, None)
-        | _, _, Some d -> (d.commit, Some d.at)
-        | _, _, None -> (None, None)
+      let { tracker; deploys; newest; live; live_since } =
+        deploy_state ctx ~repo ~branch ~since stages
       in
       let head = ok (Github.head ctx.github ~repo ~branch) in
       let prs = Option.value ~default:[] (ok (prs ctx ~repo ~branch)) in

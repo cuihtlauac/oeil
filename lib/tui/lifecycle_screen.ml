@@ -66,9 +66,20 @@ let steps t =
 let log_key = function
   | L.Actions_job j -> Printf.sprintf "gh:%d" j
   | L.Deployer_job j -> j
+  | L.Ocurrent_job { base; job } -> base ^ "/" ^ job
 
-(* Fetch a step's log once: an Actions job log at once, a deployer job's
-   followed while it runs. *)
+(* Follow an OCurrent job's log while it runs. *)
+let follow t inst job (l : Log_store.log) =
+  match
+    Instance.follow_job inst job ~on_line:(fun line ->
+        Log_store.push l line;
+        t.dirty ())
+  with
+  | Ok () -> l.complete <- true
+  | Error e -> l.error <- Some e
+
+(* Fetch a step's log once: an Actions job log at once, an OCurrent job's
+   (the deployer's, or another service's) followed while it runs. *)
 let open_log t (log : L.log) =
   let key = log_key log in
   match Log_store.find t.logs key with
@@ -83,16 +94,18 @@ let open_log t (log : L.log) =
                   List.iter (Log_store.push l) lines;
                   l.complete <- true
               | Error e -> l.error <- Some e)
-          | L.Deployer_job job -> (
-              match
-                Instance.follow_job t.inst job ~on_line:(fun line ->
-                    Log_store.push l line;
-                    t.dirty ())
-              with
-              | Ok () -> l.complete <- true
-              | Error e -> l.error <- Some e));
+          | L.Deployer_job job -> follow t t.inst job l
+          | L.Ocurrent_job { base; job } ->
+              follow t (Instance.with_base t.inst base) job l);
           t.dirty ();
           `Stop_daemon)
+
+(* Steps from elsewhere (an upstream), shown as they are. *)
+let show t ~status ?note steps =
+  t.github <- steps;
+  t.status <- status;
+  t.note <- note;
+  t.dirty ()
 
 let key t ~page (k : Keys.t) =
   let rows = steps t in
@@ -193,12 +206,14 @@ let table ~now ~live ~selected rows =
 
 let summary_line rows =
   match L.summary rows with
-  | Some (total, waiting) when total > 0. ->
-      let share = 100. *. waiting /. total in
+  | Some (total, waiting) when total > 0. && waiting > 0. ->
       muted
         (Printf.sprintf
            "%s from the first step to the last · %s (%.0f%%) waiting for review and merge"
-           (Render.duration total) (Render.duration waiting) share)
+           (Render.duration total) (Render.duration waiting)
+           (100. *. waiting /. total))
+  | Some (total, _) when total > 0. ->
+      muted (Printf.sprintf "%s from the first step to the last" (Render.duration total))
   | _ -> View.empty
 
 let header t = View.hcat ~gap:3 [ View.role `Header (text t.title); t.status ]

@@ -212,3 +212,11 @@ let pulls_of_commit t ~repo ~sha ~base =
 
 let token t = t.token
 let web t = t.web
+
+(* A commit, with its date and message. *)
+let commit_info t ~repo ~ref_ =
+  Result.bind
+    (get_json t (Printf.sprintf "/repos/%s/commits/%s" repo ref_))
+    (fun j ->
+      try Ok (to_commit j)
+      with Yojson.Safe.Util.Type_error (m, _) -> Error ("unexpected GitHub reply: " ^ m))

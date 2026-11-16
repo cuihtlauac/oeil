@@ -6,8 +6,17 @@ type t =
 let valid_repo r =
   match String.split_on_char '/' r with [ o; n ] -> o <> "" && n <> "" | _ -> false
 
+(* oeil is about ocaml.org: a target without a repository is one of its. *)
+let default_repo = "ocaml/ocaml.org"
+
 let parse s =
   let s = String.trim s in
+  let s =
+    match s with
+    | "" -> s
+    | _ when s.[0] = '#' || s.[0] = '@' || s.[0] = ':' -> default_repo ^ s
+    | _ -> s
+  in
   let split c =
     match String.index_opt s c with
     | Some i -> Some (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))

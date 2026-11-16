@@ -33,7 +33,12 @@ let make net =
   in
   { client = Cohttp_eio.Client.make ~https:(Some https) net }
 
-let headers_of extra = Http.Header.of_list (("User-Agent", user_agent) :: extra)
+(* A caller's own "User-Agent" replaces oeil's. *)
+let headers_of extra =
+  let has_ua =
+    List.exists (fun (k, _) -> String.lowercase_ascii k = "user-agent") extra
+  in
+  Http.Header.of_list (if has_ua then extra else ("User-Agent", user_agent) :: extra)
 
 let error_of_exn uri e =
   Error (Printf.sprintf "%s: %s" (Uri.to_string uri) (Printexc.to_string e))

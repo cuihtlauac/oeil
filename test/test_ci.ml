@@ -141,6 +141,22 @@ let timeline () =
     (Some (1000., 600.))
     (Lifecycle.summary steps)
 
+let health_run () =
+  (* check.ci names its latest run in its log links, as ocaml.org's scraper
+     reads it. *)
+  let page =
+    {|<a href="/diff">Differences</a><a href="/log/notarun/x/">x</a>
+<a href="/log/1794302746-78c202b54f936f55f02e3237df71f8b4d2405807/good/5.4/dune.3.20.0">dune</a>|}
+  in
+  match Oeil_net.Upstreams.run_of_page page with
+  | None -> Alcotest.fail "no run found"
+  | Some r ->
+      Alcotest.(check string)
+        "id" "1794302746-78c202b54f936f55f02e3237df71f8b4d2405807" r.run_id;
+      Alcotest.(check string)
+        "opam-repository commit" "78c202b54f936f55f02e3237df71f8b4d2405807" r.opam_commit;
+      Alcotest.(check (option (float 0.))) "time" (Some 1794302746.) r.run_time
+
 let () =
   Alcotest.run "oeil-ci"
     [
@@ -155,4 +171,5 @@ let () =
           Alcotest.test_case "14-day strip" `Quick strip;
         ] );
       ("lifecycle", [ Alcotest.test_case "durations and summary" `Quick timeline ]);
+      ("upstreams", [ Alcotest.test_case "check.ci run" `Quick health_run ]);
     ]

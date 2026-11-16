@@ -1,24 +1,40 @@
 (* The repository summary: active PRs of each deployed branch. Pure. *)
 open Oeil
 
-type row = Feed of Ci.feed | Pr of { branch : string; entry : Repo_state.entry }
+type upstream = Docs | Health | Manuals
+
+type row =
+  | Upstream of upstream
+  | Feed of Ci.feed
+  | Pr of { branch : string; entry : Repo_state.entry }
 
 type t = {
   repo : string;
   snapshot : Oeil_net.Repo_monitor.t option;
+  upstreams : Oeil_net.Upstreams.t option;
   selected : int;
   refreshing : bool;
   last_error : string option;
 }
 
 let v ~repo =
-  { repo; snapshot = None; selected = 0; refreshing = true; last_error = None }
+  {
+    repo;
+    snapshot = None;
+    upstreams = None;
+    selected = 0;
+    refreshing = true;
+    last_error = None;
+  }
 
 let rows t =
   match t.snapshot with
   | None -> []
   | Some s ->
-      List.map (fun f -> Feed f) s.feeds
+      (match t.upstreams with
+        | Some _ -> [ Upstream Docs; Upstream Health; Upstream Manuals ]
+        | None -> [])
+      @ List.map (fun f -> Feed f) s.feeds
       @ List.concat_map
           (fun (b : Oeil_net.Repo_monitor.branch) ->
             List.map (fun entry -> Pr { branch = b.branch; entry }) b.entries)

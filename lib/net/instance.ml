@@ -6,6 +6,9 @@ let default_base = "https://deploy.ci.ocaml.org"
 let make web base = { web; base = Uri.of_string base }
 let base t = t.base
 
+(* Another OCurrent service, through the same HTTP client. *)
+let with_base t base = { t with base = Uri.of_string base }
+
 let url t ?query path =
   let u = Uri.with_path t.base path in
   match query with None -> u | Some q -> Uri.with_query u (Uri.query_of_encoded q)
